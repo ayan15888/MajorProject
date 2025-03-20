@@ -582,4 +582,119 @@ const CreateExam = () => {
               required
               fullWidth
               label="Question Text"
-              name="
+              name="questionText"
+              value={currentQuestion.questionText}
+              onChange={handleQuestionChange}
+              multiline
+              rows={2}
+              sx={{ mb: 2 }}
+              disabled={isViewMode}
+            />
+
+            <FormControl fullWidth sx={{ mb: 2 }}>
+              <InputLabel>Question Type</InputLabel>
+              <Select
+                name="questionType"
+                value={currentQuestion.questionType}
+                onChange={handleQuestionChange}
+                label="Question Type"
+                disabled={isViewMode || isEditMode}
+              >
+                <MenuItem value="MCQ">Multiple Choice</MenuItem>
+                <MenuItem value="TRUE_FALSE">True/False</MenuItem>
+                <MenuItem value="PARAGRAPH">Paragraph</MenuItem>
+              </Select>
+            </FormControl>
+
+            <TextField
+              required
+              fullWidth
+              label="Marks"
+              name="marks"
+              type="number"
+              value={currentQuestion.marks}
+              onChange={handleQuestionChange}
+              sx={{ mb: 2 }}
+              InputProps={{ inputProps: { min: 1 } }}
+              disabled={isViewMode}
+            />
+
+            {currentQuestion.questionType === 'MCQ' && (
+              <Box sx={{ mb: 2 }}>
+                <Typography variant="subtitle1" gutterBottom>
+                  Options
+                </Typography>
+                {currentQuestion.options?.map((option, index) => (
+                  <Box key={index} sx={{ mb: 1, display: 'flex', alignItems: 'center', gap: 1 }}>
+                    <TextField
+                      required
+                      fullWidth
+                      label={`Option ${index + 1}`}
+                      value={option.text}
+                      onChange={(e) => handleOptionChange(index, 'text', e.target.value)}
+                    />
+                    <FormControlLabel
+                      control={
+                        <Checkbox
+                          checked={option.isCorrect}
+                          onChange={(e) => handleOptionChange(index, 'isCorrect', e.target.checked)}
+                        />
+                      }
+                      label="Correct"
+                    />
+                  </Box>
+                ))}
+              </Box>
+            )}
+
+            {currentQuestion.questionType === 'TRUE_FALSE' && (
+              <FormControl component="fieldset" sx={{ mb: 2 }}>
+                <Typography variant="subtitle1" gutterBottom>
+                  Correct Answer
+                </Typography>
+                <RadioGroup
+                  name="correctAnswer"
+                  value={currentQuestion.correctAnswer || ''}
+                  onChange={(e) => setCurrentQuestion(prev => ({ ...prev, correctAnswer: e.target.value }))}
+                >
+                  <FormControlLabel value="true" control={<Radio />} label="True" />
+                  <FormControlLabel value="false" control={<Radio />} label="False" />
+                </RadioGroup>
+              </FormControl>
+            )}
+
+            {currentQuestion.questionType === 'PARAGRAPH' && (
+              <TextField
+                required
+                fullWidth
+                label="Correct Answer"
+                name="correctAnswer"
+                value={currentQuestion.correctAnswer || ''}
+                onChange={(e) => setCurrentQuestion(prev => ({ ...prev, correctAnswer: e.target.value }))}
+                multiline
+                rows={3}
+                sx={{ mb: 2 }}
+              />
+            )}
+          </Box>
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={handleCloseDialog}>
+            {isViewMode ? 'Close' : 'Cancel'}
+          </Button>
+          {!isViewMode && (
+            <Button 
+              onClick={handleSaveQuestion} 
+              variant="contained" 
+              color="primary"
+            >
+              {isEditMode ? 'Save Changes' : 'Add Question'}
+            </Button>
+          )}
+        </DialogActions>
+      </Dialog>
+    </Container>
+  );
+};
+
+export default CreateExam; 
