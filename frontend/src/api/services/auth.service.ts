@@ -12,28 +12,61 @@ interface RegisterData extends LoginData {
 
 interface AuthResponse {
     token: string;
+    user: {
+        _id: string;
+        name: string;
+        email: string;
+        role: 'student' | 'teacher';
+    };
 }
 
 export const authService = {
     login: async (data: LoginData) => {
-        const response = await API.post<AuthResponse>('/auth/login', data);
-        if (response.data.token) {
-            localStorage.setItem('token', response.data.token);
-            // Update axios default headers
-            API.defaults.headers.common['Authorization'] = `Bearer ${response.data.token}`;
+        try {
+            console.log('Login request data:', data);
+            const response = await API.post<AuthResponse>('/auth/login', data);
+            console.log('Login response:', response.data);
+            
+            if (response.data.token) {
+                localStorage.setItem('token', response.data.token);
+                API.defaults.headers.common['Authorization'] = `Bearer ${response.data.token}`;
+            } else {
+                console.error('No token received in login response');
+            }
+            
+            return response.data;
+        } catch (error: any) {
+            console.error('Login error:', error);
+            console.error('Login error details:', error.response?.data);
+            throw error;
         }
-        return response.data;
     },
 
     register: async (data: RegisterData) => {
-        const response = await API.post<AuthResponse>('/auth/register', data);
-        return response.data;
+        try {
+            console.log('Register request data:', data);
+            const response = await API.post<AuthResponse>('/auth/register', data);
+            console.log('Register response:', response.data);
+            
+            if (response.data.token) {
+                localStorage.setItem('token', response.data.token);
+                API.defaults.headers.common['Authorization'] = `Bearer ${response.data.token}`;
+            } else {
+                console.error('No token received in register response');
+            }
+            
+            return response.data;
+        } catch (error: any) {
+            console.error('Register error:', error);
+            console.error('Register error details:', error.response?.data);
+            throw error;
+        }
     },
 
     logout: () => {
         localStorage.removeItem('token');
-        // Remove authorization header
         delete API.defaults.headers.common['Authorization'];
+        window.location.href = '/login';
     },
 
     getCurrentUser: async () => {
@@ -41,9 +74,33 @@ export const authService = {
         if (!token) {
             throw new Error('No token found');
         }
-        // Ensure the token is in the headers
-        API.defaults.headers.common['Authorization'] = `Bearer ${token}`;
-        const response = await API.get('/auth/me');
-        return response.data;
+        
+        try {
+            const response = await API.get('/auth/me');
+            return response.data;
+        } catch (error: any) {
+            console.error('Get current user error:', error);
+            console.error('Get current user error details:', error.response?.data);
+            throw error;
+        }
+    },
+
+    refreshToken: async () => {
+        try {
+            const response = await API.post<AuthResponse>('/auth/refresh');
+            
+            if (response.data.token) {
+                localStorage.setItem('token', response.data.token);
+                API.defaults.headers.common['Authorization'] = `Bearer ${response.data.token}`;
+            } else {
+                console.error('No token received in refresh response');
+            }
+            
+            return response.data;
+        } catch (error: any) {
+            console.error('Refresh token error:', error);
+            console.error('Refresh token error details:', error.response?.data);
+            throw error;
+        }
     }
 }; 

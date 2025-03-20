@@ -13,13 +13,16 @@ import {
   InputLabel,
   Select,
   MenuItem,
+  CircularProgress
 } from '@mui/material';
 import { useNavigate } from 'react-router-dom';
-import { authService } from '../../api/services/auth.service';
+import { useAuth } from '../../contexts/AuthContext';
 
 const RegisterForm = () => {
   const navigate = useNavigate();
+  const { register } = useAuth();
   const [error, setError] = useState('');
+  const [loading, setLoading] = useState(false);
 
   const formik = useFormik({
     initialValues: {
@@ -31,27 +34,45 @@ const RegisterForm = () => {
     },
     validationSchema: Yup.object({
       name: Yup.string()
-        .required('Required'),
+        .required('Name is required'),
       email: Yup.string()
         .email('Invalid email address')
-        .required('Required'),
+        .required('Email is required'),
       password: Yup.string()
-        .min(6, 'Must be at least 6 characters')
-        .required('Required'),
+        .min(6, 'Password must be at least 6 characters')
+        .required('Password is required'),
       confirmPassword: Yup.string()
         .oneOf([Yup.ref('password')], 'Passwords must match')
-        .required('Required'),
+        .required('Please confirm your password'),
       role: Yup.string()
         .oneOf(['student', 'teacher'], 'Invalid role')
-        .required('Required'),
+        .required('Role is required'),
     }),
     onSubmit: async (values) => {
       try {
+        setError('');
+        setLoading(true);
+        console.log('Submitting register form with values:', values);
         const { confirmPassword, ...registerData } = values;
-        await authService.register(registerData);
-        navigate('/login');
+        await register(
+          registerData.name,
+          registerData.email, 
+          registerData.password, 
+          registerData.role as 'student' | 'teacher'
+        );
+        console.log('Registration successful, navigating to dashboard');
+        navigate('/dashboard');
       } catch (err: any) {
-        setError(err.response?.data?.message || 'Registration failed');
+        console.error('Registration form submission error:', err);
+        if (err.response?.data?.message) {
+          setError(err.response.data.message);
+        } else if (err.response?.data?.errors) {
+          setError(err.response.data.errors.map((e: any) => e.msg).join(', '));
+        } else {
+          setError('Registration failed. Please try again with different credentials.');
+        }
+      } finally {
+        setLoading(false);
       }
     },
   });
@@ -74,7 +95,7 @@ const RegisterForm = () => {
               {error}
             </Alert>
           )}
-          <Box component="form" onSubmit={formik.handleSubmit} sx={{ mt: 1 }}>
+          <Box component="form" onSubmit={formik.handleSubmit} sx={{ mt: 1, width: '100%' }}>
             <TextField
               margin="normal"
               fullWidth
@@ -85,8 +106,10 @@ const RegisterForm = () => {
               autoFocus
               value={formik.values.name}
               onChange={formik.handleChange}
+              onBlur={formik.handleBlur}
               error={formik.touched.name && Boolean(formik.errors.name)}
               helperText={formik.touched.name && formik.errors.name}
+              disabled={loading}
             />
             <TextField
               margin="normal"
@@ -97,8 +120,10 @@ const RegisterForm = () => {
               autoComplete="email"
               value={formik.values.email}
               onChange={formik.handleChange}
+              onBlur={formik.handleBlur}
               error={formik.touched.email && Boolean(formik.errors.email)}
               helperText={formik.touched.email && formik.errors.email}
+              disabled={loading}
             />
             <TextField
               margin="normal"
@@ -110,8 +135,10 @@ const RegisterForm = () => {
               autoComplete="new-password"
               value={formik.values.password}
               onChange={formik.handleChange}
+              onBlur={formik.handleBlur}
               error={formik.touched.password && Boolean(formik.errors.password)}
               helperText={formik.touched.password && formik.errors.password}
+              disabled={loading}
             />
             <TextField
               margin="normal"
@@ -122,8 +149,10 @@ const RegisterForm = () => {
               id="confirmPassword"
               value={formik.values.confirmPassword}
               onChange={formik.handleChange}
+              onBlur={formik.handleBlur}
               error={formik.touched.confirmPassword && Boolean(formik.errors.confirmPassword)}
               helperText={formik.touched.confirmPassword && formik.errors.confirmPassword}
+              disabled={loading}
             />
             <FormControl fullWidth margin="normal">
               <InputLabel id="role-label">Role</InputLabel>
@@ -134,6 +163,9 @@ const RegisterForm = () => {
                 value={formik.values.role}
                 label="Role"
                 onChange={formik.handleChange}
+                onBlur={formik.handleBlur}
+                error={formik.touched.role && Boolean(formik.errors.role)}
+                disabled={loading}
               >
                 <MenuItem value="student">Student</MenuItem>
                 <MenuItem value="teacher">Teacher</MenuItem>
@@ -144,13 +176,15 @@ const RegisterForm = () => {
               fullWidth
               variant="contained"
               sx={{ mt: 3, mb: 2 }}
+              disabled={loading || formik.isSubmitting}
             >
-              Sign Up
+              {loading ? <CircularProgress size={24} /> : 'Sign Up'}
             </Button>
             <Button
               fullWidth
               variant="text"
               onClick={() => navigate('/login')}
+              disabled={loading}
             >
               Already have an account? Sign In
             </Button>

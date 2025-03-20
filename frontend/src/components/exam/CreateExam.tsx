@@ -84,19 +84,110 @@ const CreateExam = () => {
     try {
       setLoading(true);
       const exam = await examService.getExamById(examId);
-      setExamData(exam);
-      setQuestions(exam.questions || []);
+      
+      console.log('Received exam data:', exam); // Debug log
+
+      // Ensure we have valid data
+      if (!exam || typeof exam !== 'object') {
+        throw new Error('Invalid exam data received');
+      }
+
+      let startDateTime;
+      try {
+        // Try parsing the date, handling different possible formats
+        if (exam.startTime) {
+          if (typeof exam.startTime === 'string') {
+            // If it's already an ISO string, use it directly
+            if (exam.startTime.includes('T')) {
+              startDateTime = new Date(exam.startTime);
+            } else {
+              // If it's a different format, try parsing with Date.parse
+              const timestamp = Date.parse(exam.startTime);
+              if (isNaN(timestamp)) {
+                throw new Error('Invalid date format');
+              }
+              startDateTime = new Date(timestamp);
+            }
+          } else if (exam.startTime instanceof Date) {
+            startDateTime = exam.startTime;
+          } else {
+            throw new Error('Unsupported date format');
+          }
+        } else {
+          // If no start time, use current date/time
+          startDateTime = new Date();
+        }
+
+        if (isNaN(startDateTime.getTime())) {
+          throw new Error('Invalid date value');
+        }
+      } catch (dateError) {
+        console.error('Date parsing error:', dateError);
+        // Fallback to current date if parsing fails
+        startDateTime = new Date();
+      }
+
+      // Format the exam data
+      const formattedExamData = {
+        title: exam.title || '',
+        description: exam.description || '',
+        subject: exam.subject || '',
+        duration: Number(exam.duration) || 60,
+        startDate: format(startDateTime, 'yyyy-MM-dd'),
+        startTime: format(startDateTime, 'HH:mm'),
+        totalMarks: Number(exam.totalMarks) || 0,
+        status: exam.status || 'DRAFT'
+      };
+
+      console.log('Formatted exam data:', formattedExamData); // Debug log
+      setExamData(formattedExamData);
+
+      // Handle questions
+      let formattedQuestions = [];
+      if (exam.questions && Array.isArray(exam.questions)) {
+        formattedQuestions = exam.questions.map(q => ({
+          _id: q._id,
+          examId: q.examId,
+          questionText: q.questionText || '',
+          questionType: q.questionType || 'MCQ',
+          marks: Number(q.marks) || 0,
+          correctAnswer: q.correctAnswer || '',
+          options: Array.isArray(q.options) 
+            ? q.options.map(opt => ({
+                text: opt.text || '',
+                isCorrect: Boolean(opt.isCorrect)
+              }))
+            : [
+                { text: '', isCorrect: false },
+                { text: '', isCorrect: false },
+                { text: '', isCorrect: false },
+                { text: '', isCorrect: false }
+              ]
+        }));
+      }
+
+      console.log('Formatted questions:', formattedQuestions); // Debug log
+      setQuestions(formattedQuestions);
     } catch (error) {
       console.error('Failed to load exam:', error);
+      alert('Failed to load exam data. Please try again.');
+      navigate('/dashboard');
     } finally {
       setLoading(false);
     }
   };
 
   const calculateEndDateTime = () => {
-    const startDateTime = new Date(`${examData.startDate}T${examData.startTime}`);
-    const endDateTime = new Date(startDateTime.getTime() + examData.duration * 60000);
-    return endDateTime;
+    try {
+      const startDateTime = new Date(`${examData.startDate}T${examData.startTime}`);
+      if (isNaN(startDateTime.getTime())) {
+        throw new Error('Invalid start date/time');
+      }
+      return new Date(startDateTime.getTime() + (examData.duration || 0) * 60000);
+    } catch (error) {
+      console.error('Error calculating end time:', error);
+      throw error; // Re-throw to handle in the calling function
+    }
   };
 
   const handleExamChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -149,70 +240,140 @@ const CreateExam = () => {
 
     try {
       setLoading(true);
-      const startDateTime = new Date(`${examData.startDate}T${examData.startTime}`);
-      const endDateTime = calculateEndDateTime();
       
-      // Create the exam first without questions
+      // Validate required fields
+      if (!examData.title || !examData.description || !examData.subject) {
+        throw new Error('Please fill in all required exam details (title, description, and subject)');
+      }
+
+      if (questions.length === 0) {
+        throw new Error('Please add at least one question to the exam');
+      }
+
+      // Create a valid date object from the form data
+      const startDateTime = new Date(`${examData.startDate}T${examData.startTime}`);
+      console.log('Start DateTime:', startDateTime);
+      
+      if (isNaN(startDateTime.getTime())) {
+        throw new Error('Invalid start date/time format');
+      }
+
+      const endDateTime = calculateEndDateTime();
+      console.log('End DateTime:', endDateTime);
+      
+      if (isNaN(endDateTime.getTime())) {
+        throw new Error('Invalid end date/time calculation');
+      }
+
+      const totalMarks = questions.reduce((sum, q) => sum + (Number(q.marks) || 0), 0);
+      
       const examPayload = {
-        title: examData.title,
-        description: examData.description,
-        subject: examData.subject,
+        title: examData.title.trim(),
+        description: examData.description.trim(),
+        subject: examData.subject.trim(),
         duration: Number(examData.duration),
         startTime: startDateTime.toISOString(),
         endTime: endDateTime.toISOString(),
-        totalMarks: questions.reduce((sum, q) => sum + (Number(q.marks) || 0), 0),
-        status: 'DRAFT'
+        totalMarks: totalMarks,
+        status: examData.status || 'DRAFT'
       };
 
+      console.log('Submitting exam payload:', examPayload);
+
       if (examId) {
-        await examService.updateExam(examId, examPayload);
-        // Update questions
+        // Update existing exam
+        console.log('Updating exam with ID:', examId);
+        const updatedExam = await examService.updateExam(examId, examPayload);
+        console.log('Exam updated successfully:', updatedExam);
+        
+        // First get the existing questions to determine which ones to update vs. add
+        console.log('Fetching existing questions');
+        let existingQuestions = [];
+        try {
+          const questionsResponse = await examService.getQuestions(examId);
+          existingQuestions = questionsResponse;
+          console.log('Existing questions:', existingQuestions);
+        } catch (error) {
+          console.warn('Could not fetch existing questions:', error);
+          // Continue with the assumption that no questions exist
+        }
+        
+        // Create a map of existing questions by MongoDB ID
+        const existingQuestionsMap = new Map();
+        existingQuestions.forEach(q => {
+          if (q._id && q._id.toString().length > 10) {
+            existingQuestionsMap.set(q._id, q);
+          }
+        });
+        
+        // Process questions
         for (const question of questions) {
-          if (question._id && question._id.toString().length > 10) {
-            // Existing question, update it
-            await examService.updateQuestion(examId, question._id, {
-              questionText: question.questionText,
-              questionType: question.questionType,
-              options: question.options,
-              marks: Number(question.marks),
-              correctAnswer: question.correctAnswer
-            });
-          } else {
-            // New question, add it
-            await examService.addQuestion(examId, {
+          try {
+            // Check if this is an existing MongoDB question (has an _id longer than 10 chars and exists in our map)
+            if (question._id && question._id.toString().length > 10 && existingQuestionsMap.has(question._id)) {
+              // Update existing question
+              console.log('Updating existing question:', question._id);
+              await examService.updateQuestion(examId, question._id, {
+                questionText: question.questionText,
+                questionType: question.questionType,
+                options: question.options?.map(opt => ({
+                  text: opt.text || '',
+                  isCorrect: Boolean(opt.isCorrect)
+                })),
+                marks: Number(question.marks),
+                correctAnswer: question.correctAnswer
+              });
+            } else {
+              // This is a new question or one with a temporary ID, so add it
+              console.log('Adding new question to existing exam');
+              await examService.addQuestion(examId, {
+                questionText: question.questionText,
+                questionType: question.questionType,
+                options: question.options?.map(opt => ({
+                  text: opt.text || '',
+                  isCorrect: Boolean(opt.isCorrect)
+                })),
+                marks: Number(question.marks),
+                correctAnswer: question.correctAnswer
+              });
+            }
+          } catch (questionError) {
+            console.error('Error processing question:', questionError);
+            throw new Error(`Failed to save question: ${questionError.message}`);
+          }
+        }
+      } else {
+        // Create new exam
+        console.log('Creating new exam');
+        const createdExam = await examService.createExam(examPayload);
+        console.log('Exam created successfully:', createdExam);
+        
+        // Add questions one by one
+        for (const question of questions) {
+          try {
+            console.log('Adding question to new exam:', question);
+            await examService.addQuestion(createdExam._id!, {
               questionText: question.questionText,
               questionType: question.questionType,
               options: question.options?.map(opt => ({
-                text: opt.text,
+                text: opt.text || '',
                 isCorrect: Boolean(opt.isCorrect)
               })),
               marks: Number(question.marks),
               correctAnswer: question.correctAnswer
             });
+          } catch (questionError) {
+            console.error('Error adding question:', questionError);
+            throw new Error(`Failed to add question: ${questionError.message}`);
           }
         }
-      } else {
-        // Create new exam
-        const createdExam = await examService.createExam(examPayload);
-        
-        // Add questions one by one
-        for (const question of questions) {
-          await examService.addQuestion(createdExam._id!, {
-            questionText: question.questionText,
-            questionType: question.questionType,
-            options: question.options?.map(opt => ({
-              text: opt.text,
-              isCorrect: Boolean(opt.isCorrect)
-            })),
-            marks: Number(question.marks),
-            correctAnswer: question.correctAnswer
-          });
-        }
       }
+      
+      console.log('Exam and questions saved successfully');
       navigate('/dashboard');
     } catch (error) {
       console.error('Failed to save exam:', error);
-      alert('Failed to save exam. Please try again.');
+      alert(error.message || 'Failed to save exam. Please check all fields and try again.');
     } finally {
       setLoading(false);
     }
@@ -251,7 +412,7 @@ const CreateExam = () => {
     }
 
     const newQuestion: Question = {
-      _id: Date.now().toString(),
+      _id: `temp_${Date.now()}`,
       examId: examId || '',
       questionText: currentQuestion.questionText || '',
       questionType: currentQuestion.questionType || 'MCQ',
@@ -364,7 +525,7 @@ const CreateExam = () => {
     }
 
     const updatedQuestion: Question = {
-      _id: isEditMode ? selectedQuestion?._id || Date.now().toString() : Date.now().toString(),
+      _id: isEditMode && selectedQuestion?._id ? selectedQuestion._id : `temp_${Date.now()}`,
       examId: examId || '',
       questionText: currentQuestion.questionText || '',
       questionType: currentQuestion.questionType || 'MCQ',
@@ -550,7 +711,7 @@ const CreateExam = () => {
               </List>
             </Box>
 
-            <Box sx={{ mt: 4, display: 'flex', justifyContent: 'space-between' }}>
+            <Box sx={{ mt: 3, display: 'flex', justifyContent: 'space-between' }}>
               <Button onClick={handleBack}>
                 Back
               </Button>
@@ -632,12 +793,14 @@ const CreateExam = () => {
                       label={`Option ${index + 1}`}
                       value={option.text}
                       onChange={(e) => handleOptionChange(index, 'text', e.target.value)}
+                      disabled={isViewMode}
                     />
                     <FormControlLabel
                       control={
                         <Checkbox
                           checked={option.isCorrect}
                           onChange={(e) => handleOptionChange(index, 'isCorrect', e.target.checked)}
+                          disabled={isViewMode}
                         />
                       }
                       label="Correct"
@@ -656,6 +819,7 @@ const CreateExam = () => {
                   name="correctAnswer"
                   value={currentQuestion.correctAnswer || ''}
                   onChange={(e) => setCurrentQuestion(prev => ({ ...prev, correctAnswer: e.target.value }))}
+                  disabled={isViewMode}
                 >
                   <FormControlLabel value="true" control={<Radio />} label="True" />
                   <FormControlLabel value="false" control={<Radio />} label="False" />
@@ -674,6 +838,7 @@ const CreateExam = () => {
                 multiline
                 rows={3}
                 sx={{ mb: 2 }}
+                disabled={isViewMode}
               />
             )}
           </Box>

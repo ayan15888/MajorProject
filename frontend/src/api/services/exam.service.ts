@@ -6,10 +6,11 @@ export interface Exam {
   description: string;
   subject: string;
   duration: number;
-  startTime: Date;
-  endTime: Date;
+  startTime: string; // ISO string format
+  endTime: string;   // ISO string format
   totalMarks: number;
   status: 'DRAFT' | 'PUBLISHED' | 'COMPLETED';
+  questions?: Question[];
 }
 
 export interface Question {
@@ -25,30 +26,193 @@ export interface Question {
   marks: number;
 }
 
+const formatDate = (date: string | Date | undefined): string => {
+  if (!date) {
+    console.error('Missing date value in exam data. This may indicate a problem with the exam record.');
+    // Instead of using current date, we'll use a far-future date to make it obvious there's an issue
+    return new Date(Date.now() + 365 * 24 * 60 * 60 * 1000).toISOString();
+  }
+
+  try {
+    let finalDate: Date;
+
+    if (typeof date === 'string') {
+      // Handle empty strings
+      if (!date.trim()) {
+        throw new Error('Empty date string provided');
+      }
+
+      // If it's already an ISO string, parse it
+      if (date.includes('T')) {
+        finalDate = new Date(date);
+      } else if (date.includes(' ')) {
+        // If it's a date string with time (e.g., from form inputs)
+        finalDate = new Date(date);
+      } else {
+        // Try to parse the date
+        finalDate = new Date(date);
+      }
+    } else if (date instanceof Date) {
+      finalDate = date;
+    } else {
+      throw new Error(`Invalid date format: ${typeof date}`);
+    }
+
+    // Validate the parsed date
+    if (isNaN(finalDate.getTime())) {
+      throw new Error(`Invalid date value: ${date}`);
+    }
+
+    const isoString = finalDate.toISOString();
+    console.log('Date formatting successful:', {
+      input: date,
+      parsed: finalDate.toLocaleString(),
+      output: isoString
+    });
+
+    return isoString;
+  } catch (error) {
+    console.error('Error formatting date:', {
+      error,
+      input: date,
+      inputType: typeof date,
+      stack: new Error().stack
+    });
+    // Use a far-future date to make it obvious there's an issue
+    return new Date(Date.now() + 365 * 24 * 60 * 60 * 1000).toISOString();
+  }
+};
+
 export const examService = {
   // Exam operations
   createExam: async (examData: Omit<Exam, '_id'>) => {
-    const response = await API.post('/exams', examData);
+    const formattedData = {
+      ...examData,
+      startTime: formatDate(examData.startTime),
+      endTime: formatDate(examData.endTime)
+    };
+    console.log('Creating exam with formatted data:', formattedData);
+    const response = await API.post('/exams', formattedData);
     return response.data;
   },
 
   getTeacherExams: async () => {
     const response = await API.get('/exams/teacher');
-    return response.data;
+    return response.data.map((exam: any) => ({
+      ...exam,
+      startTime: formatDate(exam.startTime),
+      endTime: formatDate(exam.endTime)
+    }));
+  },
+
+  getStudentExams: async () => {
+    const response = await API.get('/exams/student');
+    return response.data.map((exam: any) => ({
+      ...exam,
+      startTime: formatDate(exam.startTime),
+      endTime: formatDate(exam.endTime)
+    }));
   },
 
   getExamById: async (examId: string) => {
+    console.log('Fetching exam with ID:', examId);
     const response = await API.get(`/exams/${examId}`);
-    return response.data;
+    const examData = response.data;
+    
+    console.log('Raw exam data received:', {
+      examId,
+      hasData: !!examData,
+      fields: examData ? Object.keys(examData) : [],
+      rawStartTime: examData?.startTime,
+      rawEndTime: examData?.endTime,
+      rawStatus: examData?.status,
+      currentTime: new Date().toISOString()
+    });
+
+    if (!examData) {
+      console.error('No exam data received from API');
+      throw new Error('Exam not found');
+    }
+
+    if (!examData.startTime || !examData.endTime) {
+      console.error('Missing required date fields:', {
+        hasStartTime: !!examData.startTime,
+        hasEndTime: !!examData.endTime,
+        examId,
+        status: examData.status
+      });
+    }
+
+    // Format dates and ensure all required fields are present
+    const formattedExam = {
+      ...examData,
+      startTime: formatDate(examData.startTime),
+      endTime: formatDate(examData.endTime),
+      status: examData.status || 'DRAFT',
+      duration: Number(examData.duration) || 0,
+      totalMarks: Number(examData.totalMarks) || 0,
+      questions: Array.isArray(examData.questions) ? examData.questions : []
+    };
+
+    console.log('Formatted exam data:', {
+      examId,
+      status: formattedExam.status,
+      startTime: formattedExam.startTime,
+      endTime: formattedExam.endTime,
+      currentTime: new Date().toISOString(),
+      isPublished: formattedExam.status === 'PUBLISHED',
+      questionCount: formattedExam.questions.length,
+      timeUntilStart: Math.floor((new Date(formattedExam.startTime).getTime() - Date.now()) / 1000 / 60),
+      timeUntilEnd: Math.floor((new Date(formattedExam.endTime).getTime() - Date.now()) / 1000 / 60)
+    });
+
+    return formattedExam;
   },
 
   updateExam: async (examId: string, examData: Partial<Exam>) => {
-    const response = await API.put(`/exams/${examId}`, examData);
+    const formattedData = {
+      ...examData,
+      startTime: formatDate(examData.startTime),
+      endTime: formatDate(examData.endTime)
+    };
+    const response = await API.put(`/exams/${examId}`, formattedData);
     return response.data;
   },
 
   deleteExam: async (examId: string) => {
     const response = await API.delete(`/exams/${examId}`);
+    return response.data;
+  },
+
+  publishExam: async (examId: string) => {
+    console.log('Publishing exam with ID:', examId);
+    
+    try {
+      // Use the dedicated publish endpoint
+      const response = await API.put(`/exams/${examId}/publish`);
+      console.log('Publish exam response:', response.data);
+
+      if (!response.data || response.data.status !== 'PUBLISHED') {
+        throw new Error('Exam status was not updated properly');
+      }
+      
+      // Return a properly formatted exam object
+      const publishedExam = {
+        ...response.data,
+        startTime: formatDate(response.data.startTime),
+        endTime: formatDate(response.data.endTime)
+      };
+      
+      console.log('Formatted published exam:', publishedExam);
+      return publishedExam;
+    } catch (error) {
+      console.error('Error publishing exam:', error);
+      throw error;
+    }
+  },
+
+  submitExam: async (examId: string, data: { answers: Array<{ questionId: string; selectedOption: string }> }) => {
+    const response = await API.post(`/exams/${examId}/submit`, data);
     return response.data;
   },
 
