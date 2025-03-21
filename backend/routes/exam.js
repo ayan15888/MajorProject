@@ -261,14 +261,43 @@ router.post('/:examId/submit', verifyToken, async (req, res) => {
 
     const savedResult = await result.save();
     
-    // Update exam status to SUBMITTED instead of COMPLETED for this student
-    // It will be marked as COMPLETED only after the end time has passed
-    exam.status = 'SUBMITTED';
-    await exam.save();
-
+    // Don't update the exam status when an individual student submits
+    // The exam should remain PUBLISHED until the end time
+    // Only mark as COMPLETED by teacher when publishing results
+    
     res.status(201).json(savedResult);
   } catch (error) {
     console.error('Error submitting exam:', error);
+    res.status(500).json({ message: error.message });
+  }
+});
+
+// Get submission status for an exam
+router.get('/:examId/submission-status', [verifyToken, isTeacher], async (req, res) => {
+  try {
+    const { examId } = req.params;
+    
+    // Get the exam
+    const exam = await Exam.findOne({ _id: examId, createdBy: req.user._id });
+    if (!exam) {
+      return res.status(404).json({ message: 'Exam not found' });
+    }
+    
+    // Count submissions
+    const submissionCount = await Result.countDocuments({ examId });
+    
+    // Return submission information
+    res.json({
+      examId: exam._id,
+      title: exam.title,
+      status: exam.status,
+      submissionCount,
+      startTime: exam.startTime,
+      endTime: exam.endTime,
+      isEnded: new Date() > new Date(exam.endTime)
+    });
+  } catch (error) {
+    console.error('Error fetching exam submission status:', error);
     res.status(500).json({ message: error.message });
   }
 });

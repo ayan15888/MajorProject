@@ -49,15 +49,30 @@ interface User {
   role: 'student' | 'teacher';
 }
 
+interface ExamWithSubmissions extends Exam {
+  submissionCount?: number;
+}
+
 const Dashboard = () => {
   const navigate = useNavigate();
   const [user, setUser] = useState<User | null>(null);
   const [loading, setLoading] = useState(true);
-  const [exams, setExams] = useState<Exam[]>([]);
+  const [exams, setExams] = useState<ExamWithSubmissions[]>([]);
   const [selectedExam, setSelectedExam] = useState<Exam | null>(null);
   const [viewDialogOpen, setViewDialogOpen] = useState(false);
 
   const theme = useTheme();
+
+  const fetchSubmissionStatus = async (examId: string): Promise<number> => {
+    try {
+      const status = await examService.getExamSubmissionStatus(examId);
+      console.log('Submission status for exam:', status);
+      return status.submissionCount || 0;
+    } catch (error) {
+      console.error('Error fetching submission status:', error);
+      return 0;
+    }
+  };
 
   useEffect(() => {
     const fetchUserData = async () => {
@@ -69,7 +84,18 @@ const Dashboard = () => {
         if (userData.role === 'teacher') {
           const teacherExams = await examService.getTeacherExams();
           console.log('Teacher exams:', teacherExams);
-          setExams(teacherExams);
+          
+          const examsWithSubmissions = await Promise.all(
+            teacherExams.map(async (exam: Exam) => {
+              if (exam.status === 'PUBLISHED') {
+                const submissionCount = await fetchSubmissionStatus(exam._id!);
+                return { ...exam, submissionCount };
+              }
+              return exam;
+            })
+          );
+          
+          setExams(examsWithSubmissions);
         } else if (userData.role === 'student') {
           console.log('Fetching student exams...');
           const studentExams = await examService.getStudentExams();
@@ -468,6 +494,16 @@ const Dashboard = () => {
                                   : theme.palette.warning.main
                           }}
                         />
+                        {exam.status === 'PUBLISHED' && exam.submissionCount !== undefined && exam.submissionCount > 0 && (
+                          <Chip
+                            size="small"
+                            label={`${exam.submissionCount} Submissions`}
+                            sx={{ 
+                              backgroundColor: alpha(theme.palette.info.main, 0.1),
+                              color: theme.palette.info.main
+                            }}
+                          />
+                        )}
                       </Box>
                       <Box sx={{ display: 'flex', alignItems: 'center', mb: 1, gap: 1 }}>
                         <AccessTimeIcon fontSize="small" color="action" />
@@ -506,7 +542,7 @@ const Dashboard = () => {
                           <DeleteIcon />
                         </IconButton>
                       </Box>
-                      <Box sx={{ width: exam.status === 'SUBMITTED' ? '100%' : 'auto', mt: exam.status === 'SUBMITTED' ? 1 : 0 }}>
+                      <Box sx={{ width: exam.status === 'PUBLISHED' && exam.submissionCount ? '100%' : 'auto', mt: exam.status === 'PUBLISHED' && exam.submissionCount ? 1 : 0 }}>
                         {exam.status === 'DRAFT' ? (
                           <Button
                             size="small"
@@ -521,7 +557,7 @@ const Dashboard = () => {
                           >
                             Publish
                           </Button>
-                        ) : exam.status === 'SUBMITTED' ? (
+                        ) : exam.status === 'PUBLISHED' && exam.submissionCount && exam.submissionCount > 0 ? (
                           <Box sx={{ display: 'flex', gap: 1, flexWrap: 'wrap', justifyContent: 'center' }}>
                             <Tooltip title="Review student submissions before publishing results">
                               <Button
@@ -558,6 +594,21 @@ const Dashboard = () => {
                               </Button>
                             </Tooltip>
                           </Box>
+                        ) : exam.status === 'PUBLISHED' ? (
+                          <Button
+                            size="small"
+                            variant="contained"
+                            color="primary"
+                            startIcon={<PeopleIcon />}
+                            onClick={() => handleViewSubmissions(exam._id!)}
+                            sx={{ 
+                              borderRadius: 2,
+                              textTransform: 'none',
+                              fontWeight: 600
+                            }}
+                          >
+                            View Submissions
+                          </Button>
                         ) : exam.status === 'COMPLETED' ? (
                           <Button
                             size="small"

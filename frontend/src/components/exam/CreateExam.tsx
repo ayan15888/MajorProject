@@ -439,15 +439,22 @@ const CreateExam = () => {
   };
 
   const handleDeleteQuestion = async (questionId: string) => {
-    if (examId) {
-      try {
+    try {
+      // Check if it's a temporary question or a server-saved question
+      if (examId && !questionId.startsWith('temp_')) {
+        // This is a server-saved question with a valid ID
         await examService.deleteQuestion(examId, questionId);
-      } catch (error) {
-        console.error('Failed to delete question:', error);
-        return;
+        console.log(`Question ${questionId} deleted from the server`);
+      } else {
+        // This is a temporary question not yet saved to the server
+        console.log(`Removing temporary question ${questionId} from state`);
       }
+      // Update the state regardless of the question type
+      setQuestions(questions.filter(q => q._id !== questionId));
+    } catch (error) {
+      console.error('Failed to delete question:', error);
+      alert('Failed to delete question. Please try again.');
     }
-    setQuestions(questions.filter(q => q._id !== questionId));
   };
 
   const handleEditQuestion = (question: Question) => {

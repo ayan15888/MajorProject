@@ -238,7 +238,7 @@ const TakeExam = () => {
                   value={answers.find(a => a.questionId === question._id)?.selectedOption || ''}
                   onChange={(e) => handleAnswerChange(question._id, e.target.value)}
                 >
-                  {question.options?.map((option: any, optIndex: number) => (
+                  {question.questionType === 'MCQ' && question.options?.map((option: any, optIndex: number) => (
                     <FormControlLabel
                       key={optIndex}
                       value={option.text}
@@ -246,6 +246,38 @@ const TakeExam = () => {
                       label={option.text}
                     />
                   ))}
+                  
+                  {question.questionType === 'TRUE_FALSE' && (
+                    <>
+                      <FormControlLabel
+                        value="true"
+                        control={<Radio />}
+                        label="True"
+                      />
+                      <FormControlLabel
+                        value="false"
+                        control={<Radio />}
+                        label="False"
+                      />
+                    </>
+                  )}
+                  
+                  {question.questionType === 'PARAGRAPH' && (
+                    <Box sx={{ mt: 2 }}>
+                      <textarea
+                        style={{ 
+                          width: '100%', 
+                          padding: '10px', 
+                          minHeight: '100px',
+                          borderRadius: '4px',
+                          border: '1px solid #ccc'
+                        }}
+                        value={answers.find(a => a.questionId === question._id)?.selectedOption || ''}
+                        onChange={(e) => handleAnswerChange(question._id, e.target.value)}
+                        placeholder="Enter your answer here..."
+                      />
+                    </Box>
+                  )}
                 </RadioGroup>
               </FormControl>
             </Paper>

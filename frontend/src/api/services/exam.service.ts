@@ -317,5 +317,17 @@ export const examService = {
       console.error('Error fetching student exam result:', error);
       throw error;
     }
+  },
+  
+  // Get submission status of an exam (for teachers)
+  getExamSubmissionStatus: async (examId: string) => {
+    try {
+      console.log(`Fetching submission status for exam: ${examId}`);
+      const response = await API.get(`/exams/${examId}/submission-status`);
+      return response.data;
+    } catch (error) {
+      console.error('Error fetching exam submission status:', error);
+      throw error;
+    }
   }
 }; 

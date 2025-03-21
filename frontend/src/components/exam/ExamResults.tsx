@@ -22,7 +22,9 @@ import {
   Cancel as CancelIcon,
   School as SchoolIcon,
   AccessTime as AccessTimeIcon,
-  Grade as GradeIcon
+  Grade as GradeIcon,
+  ToggleOn as ToggleOnIcon,
+  ToggleOff as ToggleOffIcon
 } from '@mui/icons-material';
 import { useParams, useNavigate } from 'react-router-dom';
 import { format } from 'date-fns';
@@ -318,6 +320,137 @@ const ExamResults: React.FC<ExamResultProps> = () => {
                                     )}
                                   </Box>
                                 ))}
+                              </Box>
+                            ) : question.questionType === 'TRUE_FALSE' ? (
+                              <Box>
+                                <Typography variant="subtitle2" gutterBottom sx={{ fontWeight: 500 }}>
+                                  True/False Question
+                                </Typography>
+                                <Box sx={{ display: 'flex', gap: 3, mt: 2 }}>
+                                  <Box
+                                    sx={{
+                                      display: 'flex',
+                                      alignItems: 'center',
+                                      p: 1.5,
+                                      borderRadius: 1,
+                                      backgroundColor: 
+                                        question.correctAnswer === 'true'
+                                          ? alpha(theme.palette.success.main, 0.1)
+                                          : 'transparent',
+                                      border: `1px solid ${
+                                        question.correctAnswer === 'true'
+                                          ? theme.palette.success.main
+                                          : alpha(theme.palette.divider, 0.5)
+                                      }`,
+                                    }}
+                                  >
+                                    <ToggleOnIcon 
+                                      color={question.correctAnswer === 'true' ? 'success' : 'disabled'} 
+                                      sx={{ mr: 1 }}
+                                    />
+                                    <Typography
+                                      variant="body2"
+                                      sx={{
+                                        fontWeight: question.correctAnswer === 'true' ? 600 : 400,
+                                        color: question.correctAnswer === 'true' 
+                                          ? theme.palette.success.main 
+                                          : theme.palette.text.secondary
+                                      }}
+                                    >
+                                      True {question.correctAnswer === 'true' && '(Correct Answer)'}
+                                    </Typography>
+                                  </Box>
+                                  
+                                  <Box
+                                    sx={{
+                                      display: 'flex',
+                                      alignItems: 'center',
+                                      p: 1.5,
+                                      borderRadius: 1,
+                                      backgroundColor: 
+                                        question.correctAnswer === 'false'
+                                          ? alpha(theme.palette.success.main, 0.1)
+                                          : 'transparent',
+                                      border: `1px solid ${
+                                        question.correctAnswer === 'false'
+                                          ? theme.palette.success.main
+                                          : alpha(theme.palette.divider, 0.5)
+                                      }`,
+                                    }}
+                                  >
+                                    <ToggleOffIcon 
+                                      color={question.correctAnswer === 'false' ? 'success' : 'disabled'} 
+                                      sx={{ mr: 1 }}
+                                    />
+                                    <Typography
+                                      variant="body2"
+                                      sx={{
+                                        fontWeight: question.correctAnswer === 'false' ? 600 : 400,
+                                        color: question.correctAnswer === 'false' 
+                                          ? theme.palette.success.main 
+                                          : theme.palette.text.secondary
+                                      }}
+                                    >
+                                      False {question.correctAnswer === 'false' && '(Correct Answer)'}
+                                    </Typography>
+                                  </Box>
+                                </Box>
+                                
+                                <Typography variant="subtitle2" gutterBottom sx={{ fontWeight: 500, mt: 2 }}>
+                                  Your Answer:
+                                </Typography>
+                                <Box
+                                  sx={{
+                                    display: 'flex',
+                                    alignItems: 'center',
+                                    p: 1.5,
+                                    borderRadius: 1,
+                                    backgroundColor: isCorrect
+                                      ? alpha(theme.palette.success.main, 0.1)
+                                      : alpha(theme.palette.error.main, 0.1),
+                                    border: `1px solid ${
+                                      isCorrect
+                                        ? theme.palette.success.main
+                                        : theme.palette.error.main
+                                    }`,
+                                  }}
+                                >
+                                  {question.studentAnswer === 'true' ? (
+                                    <ToggleOnIcon 
+                                      color={isCorrect ? 'success' : 'error'} 
+                                      sx={{ mr: 1 }}
+                                    />
+                                  ) : (
+                                    <ToggleOffIcon 
+                                      color={isCorrect ? 'success' : 'error'} 
+                                      sx={{ mr: 1 }}
+                                    />
+                                  )}
+                                  <Typography
+                                    variant="body2"
+                                    sx={{
+                                      fontWeight: 500,
+                                      color: isCorrect
+                                        ? theme.palette.success.main
+                                        : theme.palette.error.main
+                                    }}
+                                  >
+                                    {question.studentAnswer === 'true' ? 'True' : 'False'}
+                                  </Typography>
+                                  {isCorrect ? (
+                                    <CheckCircleIcon 
+                                      color="success" 
+                                      fontSize="small"
+                                      sx={{ ml: 1 }}
+                                    />
+                                  ) : (
+                                    <CancelIcon 
+                                      color="error" 
+                                      fontSize="small"
+                                      sx={{ ml: 1 }}
+                                    />
+                                  )}
+                                </Box>
                               </Box>
                             ) : (
                               <Box>
