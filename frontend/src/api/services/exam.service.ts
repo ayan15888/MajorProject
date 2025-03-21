@@ -278,5 +278,44 @@ export const examService = {
   }) => {
     const response = await API.patch(`/results/review/${resultId}`, updatedData);
     return response.data;
+  },
+  
+  publishResults: async (examId: string) => {
+    console.log('Publishing results for exam with ID:', examId);
+    
+    try {
+      // Update exam status to COMPLETED which means results are published
+      const response = await API.put(`/exams/${examId}/complete`);
+      console.log('Publish results response:', response.data);
+
+      if (!response.data || response.data.status !== 'COMPLETED') {
+        throw new Error('Exam status was not updated to COMPLETED');
+      }
+      
+      // Return a properly formatted exam object
+      const completedExam = {
+        ...response.data,
+        startTime: formatDate(response.data.startTime),
+        endTime: formatDate(response.data.endTime)
+      };
+      
+      console.log('Formatted completed exam with published results:', completedExam);
+      return completedExam;
+    } catch (error) {
+      console.error('Error publishing exam results:', error);
+      throw error;
+    }
+  },
+  
+  // Student result operations
+  getStudentExamResult: async (examId: string) => {
+    try {
+      console.log(`Fetching student result for exam: ${examId}`);
+      const response = await API.get(`/results/student/exam/${examId}`);
+      return response.data;
+    } catch (error) {
+      console.error('Error fetching student exam result:', error);
+      throw error;
+    }
   }
 }; 

@@ -69,6 +69,54 @@ router.get('/student', auth, async (req, res) => {
   }
 });
 
+// Get student's result for a specific exam
+router.get('/student/exam/:examId', auth, async (req, res) => {
+  try {
+    // Find the student's result for this exam
+    const result = await Result.findOne({ 
+      examId: req.params.examId, 
+      studentId: req.user._id 
+    }).populate('examId');
+    
+    if (!result) {
+      return res.status(404).json({ message: 'Result not found for this exam' });
+    }
+
+    // Get the exam to fetch questions and correct answers
+    const exam = await Exam.findById(req.params.examId);
+    if (!exam) {
+      return res.status(404).json({ message: 'Exam not found' });
+    }
+
+    // Check if exam is COMPLETED (results are published)
+    if (exam.status !== 'COMPLETED') {
+      return res.status(403).json({ message: 'Results are not published yet' });
+    }
+
+    // Get all questions for this exam to include correct answers
+    const questions = await Question.find({ examId: req.params.examId });
+    
+    // Format the response with all necessary data
+    const detailedResult = {
+      ...result.toObject(),
+      questions: questions.map(q => ({
+        _id: q._id,
+        questionText: q.questionText,
+        questionType: q.questionType,
+        options: q.options,
+        correctAnswer: q.correctAnswer,
+        marks: q.marks
+      }))
+    };
+    
+    console.log(`Fetched result for student ${req.user._id} in exam ${req.params.examId}`);
+    res.json(detailedResult);
+  } catch (error) {
+    console.error('Error fetching student exam result:', error);
+    res.status(500).json({ message: error.message });
+  }
+});
+
 // Get exam results (for teachers)
 router.get('/exam/:examId', auth, async (req, res) => {
   try {

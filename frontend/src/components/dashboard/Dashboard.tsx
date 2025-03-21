@@ -24,7 +24,8 @@ import {
   Chip,
   Avatar,
   useTheme,
-  alpha
+  alpha,
+  Tooltip
 } from '@mui/material';
 import { useNavigate } from 'react-router-dom';
 import { authService } from '../../api/services/auth.service';
@@ -37,7 +38,8 @@ import {
   School as SchoolIcon,
   Assignment as AssignmentIcon,
   Grade as GradeIcon,
-  People as PeopleIcon
+  People as PeopleIcon,
+  CheckCircle as CheckCircleIcon
 } from '@mui/icons-material';
 import { format, formatDistanceToNow } from 'date-fns';
 
@@ -162,6 +164,43 @@ const Dashboard = () => {
     navigate(`/exam-submissions/${examId}`);
   };
 
+  const handleViewResults = (examId: string) => {
+    navigate(`/exam-results/${examId}`);
+  };
+
+  const handlePublishResults = async (examId: string) => {
+    if (window.confirm('IMPORTANT: Have you reviewed all student submissions first?\n\nIt is recommended to click "Review" first to check student answers before publishing results.\n\nAre you sure you want to publish the results now? Students will be able to see their marks.')) {
+      try {
+        console.log('Publishing results for exam:', examId);
+        const updatedExam = await examService.publishResults(examId);
+        console.log('Results published successfully:', updatedExam);
+        
+        if (!updatedExam || updatedExam.status !== 'COMPLETED') {
+          throw new Error('Failed to publish results - status not updated correctly');
+        }
+
+        // Update the exam in the current state immediately
+        setExams(prevExams => 
+          prevExams.map(exam => 
+            exam._id === examId ? { ...exam, ...updatedExam } : exam
+          )
+        );
+        
+        // Refresh the exam list to get the latest data
+        if (user?.role === 'teacher') {
+          const teacherExams = await examService.getTeacherExams();
+          console.log('Refreshed teacher exams:', teacherExams);
+          setExams(teacherExams);
+        }
+        
+        alert('Results published successfully! Students can now view their results.');
+      } catch (error) {
+        console.error('Failed to publish results:', error);
+        alert('Failed to publish results. Please try again.');
+      }
+    }
+  };
+
   if (loading) {
     return (
       <Box
@@ -253,6 +292,23 @@ const Dashboard = () => {
                           label={exam.subject}
                           sx={{ backgroundColor: alpha(theme.palette.primary.main, 0.1) }}
                         />
+                        {exam.status && (
+                          <Chip
+                            size="small"
+                            label={exam.status}
+                            sx={{ 
+                              ml: 1,
+                              backgroundColor: 
+                                exam.status === 'PUBLISHED' ? alpha(theme.palette.success.main, 0.1) :
+                                exam.status === 'COMPLETED' ? alpha(theme.palette.info.main, 0.1) :
+                                alpha(theme.palette.grey[500], 0.1),
+                              color:
+                                exam.status === 'PUBLISHED' ? theme.palette.success.main :
+                                exam.status === 'COMPLETED' ? theme.palette.info.main :
+                                theme.palette.grey[700]
+                            }}
+                          />
+                        )}
                       </Box>
                       <Box sx={{ display: 'flex', alignItems: 'center', mb: 1, gap: 1 }}>
                         <AccessTimeIcon fontSize="small" color="action" />
@@ -275,19 +331,49 @@ const Dashboard = () => {
                       </Typography>
                     </CardContent>
                     <CardActions sx={{ p: 2, pt: 0 }}>
-                      <Button 
-                        fullWidth
-                        variant="contained" 
-                        color="primary"
-                        onClick={() => navigate(`/take-exam/${exam._id}`)}
-                        sx={{ 
-                          borderRadius: 2,
-                          textTransform: 'none',
-                          fontWeight: 600
-                        }}
-                      >
-                        Take Exam
-                      </Button>
+                      {exam.status === 'PUBLISHED' ? (
+                        <Button 
+                          fullWidth
+                          variant="contained" 
+                          color="primary"
+                          onClick={() => navigate(`/take-exam/${exam._id}`)}
+                          sx={{ 
+                            borderRadius: 2,
+                            textTransform: 'none',
+                            fontWeight: 600
+                          }}
+                        >
+                          Take Exam
+                        </Button>
+                      ) : exam.status === 'COMPLETED' ? (
+                        <Button 
+                          fullWidth
+                          variant="contained" 
+                          color="success"
+                          startIcon={<GradeIcon />}
+                          onClick={() => handleViewResults(exam._id!)}
+                          sx={{ 
+                            borderRadius: 2,
+                            textTransform: 'none',
+                            fontWeight: 600
+                          }}
+                        >
+                          View Results
+                        </Button>
+                      ) : (
+                        <Button 
+                          fullWidth
+                          variant="outlined" 
+                          disabled
+                          sx={{ 
+                            borderRadius: 2,
+                            textTransform: 'none',
+                            fontWeight: 600
+                          }}
+                        >
+                          {new Date() > new Date(exam.endTime) ? 'Awaiting Results' : 'Coming Soon'}
+                        </Button>
+                      )}
                     </CardActions>
                   </Card>
                 </Grid>
@@ -396,7 +482,7 @@ const Dashboard = () => {
                         </Typography>
                       </Box>
                     </CardContent>
-                    <CardActions sx={{ p: 2, pt: 0, display: 'flex', justifyContent: 'space-between' }}>
+                    <CardActions sx={{ p: 2, pt: 0, display: 'flex', justifyContent: exam.status === 'SUBMITTED' ? 'flex-end' : 'space-between', flexDirection: exam.status === 'SUBMITTED' ? 'column' : 'row', gap: 1 }}>
                       <Box>
                         <IconButton 
                           size="small" 
@@ -420,7 +506,7 @@ const Dashboard = () => {
                           <DeleteIcon />
                         </IconButton>
                       </Box>
-                      <Box>
+                      <Box sx={{ width: exam.status === 'SUBMITTED' ? '100%' : 'auto', mt: exam.status === 'SUBMITTED' ? 1 : 0 }}>
                         {exam.status === 'DRAFT' ? (
                           <Button
                             size="small"
@@ -435,7 +521,59 @@ const Dashboard = () => {
                           >
                             Publish
                           </Button>
-                        ) : (exam.status === 'PUBLISHED' || exam.status === 'SUBMITTED') && (
+                        ) : exam.status === 'SUBMITTED' ? (
+                          <Box sx={{ display: 'flex', gap: 1, flexWrap: 'wrap', justifyContent: 'center' }}>
+                            <Tooltip title="Review student submissions before publishing results">
+                              <Button
+                                size="small"
+                                variant="outlined"
+                                color="primary"
+                                startIcon={<PeopleIcon />}
+                                onClick={() => handleViewSubmissions(exam._id!)}
+                                sx={{ 
+                                  borderRadius: 2,
+                                  textTransform: 'none',
+                                  fontWeight: 600,
+                                  fontSize: '0.75rem'
+                                }}
+                              >
+                                Review
+                              </Button>
+                            </Tooltip>
+                            <Tooltip title="Publish results to students">
+                              <Button
+                                size="small"
+                                variant="contained"
+                                color="success"
+                                startIcon={<GradeIcon />}
+                                onClick={() => handlePublishResults(exam._id!)}
+                                sx={{ 
+                                  borderRadius: 2,
+                                  textTransform: 'none',
+                                  fontWeight: 600,
+                                  fontSize: '0.75rem'
+                                }}
+                              >
+                                Publish
+                              </Button>
+                            </Tooltip>
+                          </Box>
+                        ) : exam.status === 'COMPLETED' ? (
+                          <Button
+                            size="small"
+                            variant="outlined"
+                            color="success"
+                            startIcon={<CheckCircleIcon />}
+                            onClick={() => handleViewSubmissions(exam._id!)}
+                            sx={{ 
+                              borderRadius: 2,
+                              textTransform: 'none',
+                              fontWeight: 600
+                            }}
+                          >
+                            Results Published
+                          </Button>
+                        ) : (
                           <Button
                             size="small"
                             variant="contained"

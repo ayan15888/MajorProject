@@ -66,10 +66,14 @@ router.get('/teacher', [verifyToken, isTeacher], async (req, res) => {
 router.get('/student', verifyToken, async (req, res) => {
   try {
     const now = new Date();
-    // Get published exams that are currently active or upcoming
+    // Get both: 
+    // 1. Published exams that are currently active or upcoming
+    // 2. Completed exams (with results published)
     const exams = await Exam.find({
-      status: 'PUBLISHED',
-      endTime: { $gte: now } // End time is in the future
+      $or: [
+        { status: 'PUBLISHED', endTime: { $gte: now } }, // Active or upcoming exams
+        { status: 'COMPLETED' } // Completed exams with results
+      ]
     })
     .populate('createdBy', 'name')
     .sort({ startTime: 1 });
@@ -180,6 +184,33 @@ router.put('/:examId/publish', [verifyToken, isTeacher], async (req, res) => {
     res.json(exam);
   } catch (error) {
     console.error('Error publishing exam:', error);
+    res.status(400).json({ message: error.message });
+  }
+});
+
+// Complete exam and publish results
+router.put('/:examId/complete', [verifyToken, isTeacher], async (req, res) => {
+  try {
+    const exam = await Exam.findOneAndUpdate(
+      { _id: req.params.examId, createdBy: req.user._id },
+      { status: 'COMPLETED' },
+      { new: true }
+    );
+    
+    if (!exam) {
+      return res.status(404).json({ message: 'Exam not found or not authorized' });
+    }
+
+    console.log('Exam marked as completed and results published:', {
+      examId: exam._id,
+      status: exam.status,
+      startTime: exam.startTime,
+      endTime: exam.endTime
+    });
+    
+    res.json(exam);
+  } catch (error) {
+    console.error('Error completing exam and publishing results:', error);
     res.status(400).json({ message: error.message });
   }
 });

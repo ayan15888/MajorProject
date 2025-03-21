@@ -7,6 +7,7 @@ import Dashboard from './components/dashboard/Dashboard';
 import CreateExam from './components/exam/CreateExam';
 import TakeExam from './components/exam/TakeExam';
 import SubmissionReview from './components/exam/SubmissionReview';
+import ExamResults from './components/exam/ExamResults';
 import CssBaseline from '@mui/material/CssBaseline';
 import { useAuth } from './contexts/AuthContext';
 // Import Google Fonts
@@ -174,6 +175,14 @@ const AppRoutes = () => {
         element={
           <PrivateRoute>
             <TakeExam />
+          </PrivateRoute>
+        }
+      />
+      <Route
+        path="/exam-results/:examId"
+        element={
+          <PrivateRoute>
+            <ExamResults />
           </PrivateRoute>
         }
       />
