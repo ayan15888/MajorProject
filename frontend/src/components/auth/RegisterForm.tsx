@@ -13,16 +13,32 @@ import {
   InputLabel,
   Select,
   MenuItem,
-  CircularProgress
+  CircularProgress,
+  useTheme,
+  alpha,
+  IconButton,
+  InputAdornment
 } from '@mui/material';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../../contexts/AuthContext';
+import {
+  School as SchoolIcon,
+  Person as PersonIcon,
+  Email as EmailIcon,
+  Lock as LockIcon,
+  Visibility as VisibilityIcon,
+  VisibilityOff as VisibilityOffIcon,
+  Badge as BadgeIcon
+} from '@mui/icons-material';
 
 const RegisterForm = () => {
   const navigate = useNavigate();
   const { register } = useAuth();
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
+  const [showPassword, setShowPassword] = useState(false);
+  const [showConfirmPassword, setShowConfirmPassword] = useState(false);
+  const theme = useTheme();
 
   const formik = useFormik({
     initialValues: {
@@ -77,25 +93,112 @@ const RegisterForm = () => {
     },
   });
 
+  const handleClickShowPassword = () => {
+    setShowPassword(!showPassword);
+  };
+
+  const handleClickShowConfirmPassword = () => {
+    setShowConfirmPassword(!showConfirmPassword);
+  };
+
   return (
     <Container component="main" maxWidth="xs">
-      <Paper elevation={3} sx={{ p: 4, mt: 8 }}>
-        <Box
+      <Box
+        sx={{
+          mt: 8,
+          mb: 4,
+          display: 'flex',
+          flexDirection: 'column',
+          alignItems: 'center',
+        }}
+      >
+        <Paper
+          elevation={6}
           sx={{
-            display: 'flex',
-            flexDirection: 'column',
-            alignItems: 'center',
+            p: 4,
+            width: '100%',
+            borderRadius: 2,
+            backgroundColor: 'white',
+            position: 'relative',
+            overflow: 'hidden',
+            '&::before': {
+              content: '""',
+              position: 'absolute',
+              top: 0,
+              left: 0,
+              right: 0,
+              height: '4px',
+              background: `linear-gradient(90deg, ${theme.palette.primary.main}, ${theme.palette.primary.light})`
+            }
           }}
         >
-          <Typography component="h1" variant="h5">
-            Sign Up
-          </Typography>
+          <Box
+            sx={{
+              display: 'flex',
+              flexDirection: 'column',
+              alignItems: 'center',
+              mb: 3
+            }}
+          >
+            <Box
+              sx={{
+                width: 56,
+                height: 56,
+                borderRadius: '50%',
+                backgroundColor: alpha(theme.palette.primary.main, 0.1),
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                mb: 2
+              }}
+            >
+              <SchoolIcon
+                sx={{
+                  fontSize: 32,
+                  color: theme.palette.primary.main
+                }}
+              />
+            </Box>
+            <Typography
+              component="h1"
+              variant="h4"
+              sx={{
+                fontWeight: 700,
+                color: theme.palette.text.primary,
+                mb: 1
+              }}
+            >
+              Create Account
+            </Typography>
+            <Typography
+              variant="body2"
+              sx={{
+                color: theme.palette.text.secondary,
+                textAlign: 'center'
+              }}
+            >
+              Join the Online Examination System
+            </Typography>
+          </Box>
+
           {error && (
-            <Alert severity="error" sx={{ width: '100%', mt: 2 }}>
+            <Alert 
+              severity="error" 
+              sx={{ 
+                width: '100%', 
+                mb: 2,
+                borderRadius: 1
+              }}
+            >
               {error}
             </Alert>
           )}
-          <Box component="form" onSubmit={formik.handleSubmit} sx={{ mt: 1, width: '100%' }}>
+
+          <Box 
+            component="form" 
+            onSubmit={formik.handleSubmit}
+            sx={{ mt: 1 }}
+          >
             <TextField
               margin="normal"
               fullWidth
@@ -110,6 +213,25 @@ const RegisterForm = () => {
               error={formik.touched.name && Boolean(formik.errors.name)}
               helperText={formik.touched.name && formik.errors.name}
               disabled={loading}
+              InputProps={{
+                startAdornment: (
+                  <InputAdornment position="start">
+                    <PersonIcon sx={{ color: theme.palette.text.secondary }} />
+                  </InputAdornment>
+                ),
+              }}
+              sx={{
+                '& .MuiOutlinedInput-root': {
+                  borderRadius: 2,
+                  backgroundColor: alpha(theme.palette.common.black, 0.02),
+                  '&:hover': {
+                    backgroundColor: alpha(theme.palette.common.black, 0.03),
+                  },
+                  '&.Mui-focused': {
+                    backgroundColor: 'transparent',
+                  }
+                }
+              }}
             />
             <TextField
               margin="normal"
@@ -124,13 +246,32 @@ const RegisterForm = () => {
               error={formik.touched.email && Boolean(formik.errors.email)}
               helperText={formik.touched.email && formik.errors.email}
               disabled={loading}
+              InputProps={{
+                startAdornment: (
+                  <InputAdornment position="start">
+                    <EmailIcon sx={{ color: theme.palette.text.secondary }} />
+                  </InputAdornment>
+                ),
+              }}
+              sx={{
+                '& .MuiOutlinedInput-root': {
+                  borderRadius: 2,
+                  backgroundColor: alpha(theme.palette.common.black, 0.02),
+                  '&:hover': {
+                    backgroundColor: alpha(theme.palette.common.black, 0.03),
+                  },
+                  '&.Mui-focused': {
+                    backgroundColor: 'transparent',
+                  }
+                }
+              }}
             />
             <TextField
               margin="normal"
               fullWidth
               name="password"
               label="Password"
-              type="password"
+              type={showPassword ? 'text' : 'password'}
               id="password"
               autoComplete="new-password"
               value={formik.values.password}
@@ -139,13 +280,43 @@ const RegisterForm = () => {
               error={formik.touched.password && Boolean(formik.errors.password)}
               helperText={formik.touched.password && formik.errors.password}
               disabled={loading}
+              InputProps={{
+                startAdornment: (
+                  <InputAdornment position="start">
+                    <LockIcon sx={{ color: theme.palette.text.secondary }} />
+                  </InputAdornment>
+                ),
+                endAdornment: (
+                  <InputAdornment position="end">
+                    <IconButton
+                      aria-label="toggle password visibility"
+                      onClick={handleClickShowPassword}
+                      edge="end"
+                    >
+                      {showPassword ? <VisibilityOffIcon /> : <VisibilityIcon />}
+                    </IconButton>
+                  </InputAdornment>
+                ),
+              }}
+              sx={{
+                '& .MuiOutlinedInput-root': {
+                  borderRadius: 2,
+                  backgroundColor: alpha(theme.palette.common.black, 0.02),
+                  '&:hover': {
+                    backgroundColor: alpha(theme.palette.common.black, 0.03),
+                  },
+                  '&.Mui-focused': {
+                    backgroundColor: 'transparent',
+                  }
+                }
+              }}
             />
             <TextField
               margin="normal"
               fullWidth
               name="confirmPassword"
               label="Confirm Password"
-              type="password"
+              type={showConfirmPassword ? 'text' : 'password'}
               id="confirmPassword"
               value={formik.values.confirmPassword}
               onChange={formik.handleChange}
@@ -153,8 +324,53 @@ const RegisterForm = () => {
               error={formik.touched.confirmPassword && Boolean(formik.errors.confirmPassword)}
               helperText={formik.touched.confirmPassword && formik.errors.confirmPassword}
               disabled={loading}
+              InputProps={{
+                startAdornment: (
+                  <InputAdornment position="start">
+                    <LockIcon sx={{ color: theme.palette.text.secondary }} />
+                  </InputAdornment>
+                ),
+                endAdornment: (
+                  <InputAdornment position="end">
+                    <IconButton
+                      aria-label="toggle password visibility"
+                      onClick={handleClickShowConfirmPassword}
+                      edge="end"
+                    >
+                      {showConfirmPassword ? <VisibilityOffIcon /> : <VisibilityIcon />}
+                    </IconButton>
+                  </InputAdornment>
+                ),
+              }}
+              sx={{
+                '& .MuiOutlinedInput-root': {
+                  borderRadius: 2,
+                  backgroundColor: alpha(theme.palette.common.black, 0.02),
+                  '&:hover': {
+                    backgroundColor: alpha(theme.palette.common.black, 0.03),
+                  },
+                  '&.Mui-focused': {
+                    backgroundColor: 'transparent',
+                  }
+                }
+              }}
             />
-            <FormControl fullWidth margin="normal">
+            <FormControl 
+              fullWidth 
+              margin="normal"
+              sx={{
+                '& .MuiOutlinedInput-root': {
+                  borderRadius: 2,
+                  backgroundColor: alpha(theme.palette.common.black, 0.02),
+                  '&:hover': {
+                    backgroundColor: alpha(theme.palette.common.black, 0.03),
+                  },
+                  '&.Mui-focused': {
+                    backgroundColor: 'transparent',
+                  }
+                }
+              }}
+            >
               <InputLabel id="role-label">Role</InputLabel>
               <Select
                 labelId="role-label"
@@ -166,6 +382,11 @@ const RegisterForm = () => {
                 onBlur={formik.handleBlur}
                 error={formik.touched.role && Boolean(formik.errors.role)}
                 disabled={loading}
+                startAdornment={
+                  <InputAdornment position="start">
+                    <BadgeIcon sx={{ color: theme.palette.text.secondary }} />
+                  </InputAdornment>
+                }
               >
                 <MenuItem value="student">Student</MenuItem>
                 <MenuItem value="teacher">Teacher</MenuItem>
@@ -175,7 +396,19 @@ const RegisterForm = () => {
               type="submit"
               fullWidth
               variant="contained"
-              sx={{ mt: 3, mb: 2 }}
+              sx={{
+                mt: 3,
+                mb: 2,
+                py: 1.5,
+                borderRadius: 2,
+                textTransform: 'none',
+                fontSize: '1rem',
+                fontWeight: 600,
+                boxShadow: '0 4px 12px rgba(0,0,0,0.1)',
+                '&:hover': {
+                  boxShadow: '0 6px 16px rgba(0,0,0,0.15)',
+                }
+              }}
               disabled={loading || formik.isSubmitting}
             >
               {loading ? <CircularProgress size={24} /> : 'Sign Up'}
@@ -185,12 +418,21 @@ const RegisterForm = () => {
               variant="text"
               onClick={() => navigate('/login')}
               disabled={loading}
+              sx={{
+                textTransform: 'none',
+                fontSize: '0.9rem',
+                fontWeight: 500,
+                color: theme.palette.text.secondary,
+                '&:hover': {
+                  backgroundColor: alpha(theme.palette.primary.main, 0.08),
+                }
+              }}
             >
               Already have an account? Sign In
             </Button>
           </Box>
-        </Box>
-      </Paper>
+        </Paper>
+      </Box>
     </Container>
   );
 };

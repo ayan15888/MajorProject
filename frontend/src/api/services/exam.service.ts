@@ -9,7 +9,7 @@ export interface Exam {
   startTime: string; // ISO string format
   endTime: string;   // ISO string format
   totalMarks: number;
-  status: 'DRAFT' | 'PUBLISHED' | 'COMPLETED';
+  status: 'DRAFT' | 'PUBLISHED' | 'SUBMITTED' | 'COMPLETED';
   questions?: Question[];
 }
 
@@ -24,6 +24,24 @@ export interface Question {
   }>;
   correctAnswer?: string;
   marks: number;
+}
+
+export interface ExamSubmission {
+  _id: string;
+  examId: string;
+  studentId: {
+    _id: string;
+    name: string;
+    email: string;
+  };
+  answers: Array<{
+    questionId: string;
+    selectedOption: string;
+    marksObtained: number;
+  }>;
+  totalMarksObtained: number;
+  submittedAt: string;
+  status: 'completed' | 'pending-review';
 }
 
 const formatDate = (date: string | Date | undefined): string => {
@@ -234,6 +252,31 @@ export const examService = {
 
   getQuestions: async (examId: string) => {
     const response = await API.get(`/exams/${examId}/questions`);
+    return response.data;
+  },
+
+  // Submission operations
+  getExamSubmissions: async (examId: string) => {
+    try {
+      console.log(`Fetching submissions for exam: ${examId}`);
+      const response = await API.get(`/results/exam/${examId}`);
+      console.log(`Received ${response.data.length} submissions`);
+      return response.data;
+    } catch (error) {
+      console.error('Error fetching exam submissions:', error);
+      throw error;
+    }
+  },
+  
+  updateSubmissionReview: async (resultId: string, updatedData: {
+    answers: Array<{
+      questionId: string;
+      selectedOption: string;
+      marksObtained: number;
+    }>;
+    totalMarksObtained: number;
+  }) => {
+    const response = await API.patch(`/results/review/${resultId}`, updatedData);
     return response.data;
   }
 }; 

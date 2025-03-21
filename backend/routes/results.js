@@ -40,7 +40,7 @@ router.post('/submit/:examId', auth, async (req, res) => {
 
     const result = new Result({
       examId: req.params.examId,
-      studentId: req.user.id,
+      studentId: req.user._id,
       answers,
       totalMarksObtained,
       status: exam.questions.some(q => q.questionType === 'descriptive') ? 'pending-review' : 'completed'
@@ -49,6 +49,7 @@ router.post('/submit/:examId', auth, async (req, res) => {
     const savedResult = await result.save();
     res.status(201).json(savedResult);
   } catch (error) {
+    console.error('Error submitting exam result:', error);
     res.status(500).json({ message: error.message });
   }
 });
@@ -56,11 +57,14 @@ router.post('/submit/:examId', auth, async (req, res) => {
 // Get student's results
 router.get('/student', auth, async (req, res) => {
   try {
-    const results = await Result.find({ studentId: req.user.id })
+    const results = await Result.find({ studentId: req.user._id })
       .populate('examId', 'title subject')
       .sort({ submittedAt: -1 });
+    
+    console.log(`Found ${results.length} results for student ${req.user._id}`);
     res.json(results);
   } catch (error) {
+    console.error('Error fetching student results:', error);
     res.status(500).json({ message: error.message });
   }
 });
@@ -74,15 +78,18 @@ router.get('/exam/:examId', auth, async (req, res) => {
     }
 
     // Check if user is the creator of the exam
-    if (exam.createdBy.toString() !== req.user.id) {
+    if (exam.createdBy.toString() !== req.user._id.toString()) {
       return res.status(401).json({ message: 'Not authorized' });
     }
 
     const results = await Result.find({ examId: req.params.examId })
       .populate('studentId', 'name email')
       .sort({ submittedAt: -1 });
+    
+    console.log(`Found ${results.length} submissions for exam ${req.params.examId}`);
     res.json(results);
   } catch (error) {
+    console.error('Error fetching exam results:', error);
     res.status(500).json({ message: error.message });
   }
 });
@@ -96,7 +103,11 @@ router.patch('/review/:resultId', auth, async (req, res) => {
     }
 
     const exam = await Exam.findById(result.examId);
-    if (exam.createdBy.toString() !== req.user.id) {
+    if (!exam) {
+      return res.status(404).json({ message: 'Exam not found' });
+    }
+    
+    if (exam.createdBy.toString() !== req.user._id.toString()) {
       return res.status(401).json({ message: 'Not authorized' });
     }
 
@@ -106,8 +117,10 @@ router.patch('/review/:resultId', auth, async (req, res) => {
     result.status = 'completed';
 
     const updatedResult = await result.save();
+    console.log(`Updated result ${req.params.resultId} with total marks ${totalMarksObtained}`);
     res.json(updatedResult);
   } catch (error) {
+    console.error('Error updating result review:', error);
     res.status(500).json({ message: error.message });
   }
 });

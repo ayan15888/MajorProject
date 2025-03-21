@@ -230,8 +230,9 @@ router.post('/:examId/submit', verifyToken, async (req, res) => {
 
     const savedResult = await result.save();
     
-    // Update exam status to COMPLETED for this student
-    exam.status = 'COMPLETED';
+    // Update exam status to SUBMITTED instead of COMPLETED for this student
+    // It will be marked as COMPLETED only after the end time has passed
+    exam.status = 'SUBMITTED';
     await exam.save();
 
     res.status(201).json(savedResult);

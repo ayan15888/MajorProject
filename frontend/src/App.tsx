@@ -6,8 +6,15 @@ import RegisterForm from './components/auth/RegisterForm';
 import Dashboard from './components/dashboard/Dashboard';
 import CreateExam from './components/exam/CreateExam';
 import TakeExam from './components/exam/TakeExam';
+import SubmissionReview from './components/exam/SubmissionReview';
 import CssBaseline from '@mui/material/CssBaseline';
 import { useAuth } from './contexts/AuthContext';
+// Import Google Fonts
+import '@fontsource/bricolage-grotesque/300.css';
+import '@fontsource/bricolage-grotesque/400.css';
+import '@fontsource/bricolage-grotesque/500.css';
+import '@fontsource/bricolage-grotesque/600.css';
+import '@fontsource/bricolage-grotesque/700.css';
 
 const theme = createTheme({
   palette: {
@@ -17,6 +24,53 @@ const theme = createTheme({
     },
     secondary: {
       main: '#dc004e',
+    },
+  },
+  typography: {
+    fontFamily: '"Bricolage Grotesque", sans-serif',
+    h1: {
+      fontFamily: '"Bricolage Grotesque", sans-serif',
+      fontWeight: 700,
+    },
+    h2: {
+      fontFamily: '"Bricolage Grotesque", sans-serif',
+      fontWeight: 700,
+    },
+    h3: {
+      fontFamily: '"Bricolage Grotesque", sans-serif',
+      fontWeight: 600,
+    },
+    h4: {
+      fontFamily: '"Bricolage Grotesque", sans-serif',
+      fontWeight: 600,
+    },
+    h5: {
+      fontFamily: '"Bricolage Grotesque", sans-serif',
+      fontWeight: 500,
+    },
+    h6: {
+      fontFamily: '"Bricolage Grotesque", sans-serif',
+      fontWeight: 500,
+    },
+    subtitle1: {
+      fontFamily: '"Bricolage Grotesque", sans-serif',
+      fontWeight: 500,
+    },
+    subtitle2: {
+      fontFamily: '"Bricolage Grotesque", sans-serif',
+      fontWeight: 500,
+    },
+    body1: {
+      fontFamily: '"Bricolage Grotesque", sans-serif',
+      fontWeight: 400,
+    },
+    body2: {
+      fontFamily: '"Bricolage Grotesque", sans-serif',
+      fontWeight: 400,
+    },
+    button: {
+      fontFamily: '"Bricolage Grotesque", sans-serif',
+      fontWeight: 500,
     },
   },
 });
@@ -104,6 +158,14 @@ const AppRoutes = () => {
         element={
           <TeacherRoute>
             <CreateExam />
+          </TeacherRoute>
+        }
+      />
+      <Route
+        path="/exam-submissions/:examId"
+        element={
+          <TeacherRoute>
+            <SubmissionReview />
           </TeacherRoute>
         }
       />

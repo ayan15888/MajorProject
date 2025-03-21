@@ -20,13 +20,26 @@ import {
   List,
   ListItem,
   ListItemText,
-  Divider
+  Divider,
+  Chip,
+  Avatar,
+  useTheme,
+  alpha
 } from '@mui/material';
 import { useNavigate } from 'react-router-dom';
 import { authService } from '../../api/services/auth.service';
 import { examService, Exam, Question } from '../../api/services/exam.service';
-import { Edit as EditIcon, Delete as DeleteIcon, Visibility as VisibilityIcon } from '@mui/icons-material';
-import { format } from 'date-fns';
+import {
+  Edit as EditIcon,
+  Delete as DeleteIcon,
+  Visibility as VisibilityIcon,
+  AccessTime as AccessTimeIcon,
+  School as SchoolIcon,
+  Assignment as AssignmentIcon,
+  Grade as GradeIcon,
+  People as PeopleIcon
+} from '@mui/icons-material';
+import { format, formatDistanceToNow } from 'date-fns';
 
 interface User {
   name: string;
@@ -41,6 +54,8 @@ const Dashboard = () => {
   const [exams, setExams] = useState<Exam[]>([]);
   const [selectedExam, setSelectedExam] = useState<Exam | null>(null);
   const [viewDialogOpen, setViewDialogOpen] = useState(false);
+
+  const theme = useTheme();
 
   useEffect(() => {
     const fetchUserData = async () => {
@@ -84,8 +99,16 @@ const Dashboard = () => {
   };
 
   const handleViewExam = (exam: Exam) => {
-    setSelectedExam(exam);
-    setViewDialogOpen(true);
+    // Fetch the exam with questions before showing the dialog
+    examService.getExamById(exam._id!)
+      .then(completeExam => {
+        setSelectedExam(completeExam);
+        setViewDialogOpen(true);
+      })
+      .catch(error => {
+        console.error('Failed to fetch exam details:', error);
+        alert('Failed to load exam details. Please try again.');
+      });
   };
 
   const handleDeleteExam = async (examId: string) => {
@@ -135,232 +158,449 @@ const Dashboard = () => {
     }
   };
 
+  const handleViewSubmissions = (examId: string) => {
+    navigate(`/exam-submissions/${examId}`);
+  };
+
   if (loading) {
     return (
-      <Box display="flex" justifyContent="center" alignItems="center" minHeight="100vh">
+      <Box
+        display="flex"
+        justifyContent="center"
+        alignItems="center"
+        minHeight="100vh"
+        sx={{ backgroundColor: theme.palette.background.default }}
+      >
         <CircularProgress />
       </Box>
     );
   }
 
   return (
-    <Box sx={{ flexGrow: 1 }}>
-      <AppBar position="static">
+    <Box sx={{ flexGrow: 1, backgroundColor: theme.palette.background.default, minHeight: '100vh' }}>
+      <AppBar position="static" elevation={0} sx={{ backgroundColor: theme.palette.primary.main }}>
         <Toolbar>
-          <Typography variant="h6" component="div" sx={{ flexGrow: 1 }}>
+          <SchoolIcon sx={{ mr: 2 }} />
+          <Typography variant="h6" component="div" sx={{ flexGrow: 1, fontWeight: 600 }}>
             Online Examination System
           </Typography>
-          <Button color="inherit" onClick={handleLogout}>
-            Logout
-          </Button>
+          <Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
+            <Chip
+              avatar={<Avatar>{user?.name[0]}</Avatar>}
+              label={user?.name}
+              variant="outlined"
+              sx={{ 
+                backgroundColor: alpha(theme.palette.common.white, 0.1),
+                color: 'white',
+                '& .MuiChip-avatar': {
+                  backgroundColor: alpha(theme.palette.common.white, 0.8),
+                  color: theme.palette.primary.main
+                }
+              }}
+            />
+            <Button 
+              color="error" 
+              onClick={handleLogout}
+              variant="contained"
+              sx={{ 
+                borderRadius: 2,
+                textTransform: 'none',
+                fontWeight: 600,
+                backgroundColor: theme.palette.error.main,
+                '&:hover': {
+                  backgroundColor: theme.palette.error.dark
+                }
+              }}
+            >
+              Logout
+            </Button>
+          </Box>
         </Toolbar>
       </AppBar>
 
-      <Container maxWidth="lg" sx={{ mt: 4 }}>
-        <Paper sx={{ p: 3 }}>
-          <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 3 }}>
-            <Box>
-              <Typography variant="h4" gutterBottom>
-                Welcome, {user?.name}!
-              </Typography>
-              <Typography variant="subtitle1" color="text.secondary" gutterBottom>
-                {user?.email} - {user?.role ? user.role.charAt(0).toUpperCase() + user.role.slice(1) : ''}
-              </Typography>
-            </Box>
-          </Box>
-
+      <Container maxWidth="lg" sx={{ mt: 4, mb: 4 }}>
+        <Grid container spacing={3}>
           {user?.role === 'student' ? (
-            <Box sx={{ mt: 4 }}>
-              <Typography variant="h5" gutterBottom>
-                Your Upcoming Exams
-              </Typography>
-              <Grid container spacing={3}>
-                {exams.map((exam) => (
-                  <Grid item xs={12} sm={6} md={4} key={exam._id}>
-                    <Card>
-                      <CardContent>
-                        <Typography variant="h6" gutterBottom>
-                          {exam.title}
-                        </Typography>
-                        <Typography variant="body2" color="text.secondary" gutterBottom>
-                          Subject: {exam.subject}
-                        </Typography>
-                        <Typography variant="body2">
+            // Student Dashboard
+            <>
+              <Grid item xs={12}>
+                <Typography variant="h4" gutterBottom sx={{ fontWeight: 600, color: theme.palette.text.primary }}>
+                  My Exams
+                </Typography>
+              </Grid>
+              {exams.map((exam) => (
+                <Grid item xs={12} sm={6} md={4} key={exam._id}>
+                  <Card 
+                    elevation={2}
+                    sx={{ 
+                      height: '100%',
+                      display: 'flex',
+                      flexDirection: 'column',
+                      transition: 'transform 0.2s, box-shadow 0.2s',
+                      '&:hover': {
+                        transform: 'translateY(-4px)',
+                        boxShadow: theme.shadows[4]
+                      }
+                    }}
+                  >
+                    <CardContent sx={{ flexGrow: 1 }}>
+                      <Typography variant="h6" gutterBottom sx={{ fontWeight: 600, color: theme.palette.primary.main }}>
+                        {exam.title}
+                      </Typography>
+                      <Box sx={{ mb: 2 }}>
+                        <Chip
+                          size="small"
+                          label={exam.subject}
+                          sx={{ backgroundColor: alpha(theme.palette.primary.main, 0.1) }}
+                        />
+                      </Box>
+                      <Box sx={{ display: 'flex', alignItems: 'center', mb: 1, gap: 1 }}>
+                        <AccessTimeIcon fontSize="small" color="action" />
+                        <Typography variant="body2" color="text.secondary">
                           Duration: {exam.duration} minutes
                         </Typography>
-                        <Typography variant="body2">
+                      </Box>
+                      <Box sx={{ display: 'flex', alignItems: 'center', mb: 1, gap: 1 }}>
+                        <GradeIcon fontSize="small" color="action" />
+                        <Typography variant="body2" color="text.secondary">
                           Total Marks: {exam.totalMarks}
                         </Typography>
-                        <Typography variant="body2" color="primary">
-                          Start Time: {new Date(exam.startTime).toLocaleString()}
-                        </Typography>
-                        <Typography variant="body2" color="error">
-                          End Time: {new Date(exam.endTime).toLocaleString()}
-                        </Typography>
-                      </CardContent>
-                      <CardActions>
-                        <Button 
-                          size="small" 
-                          variant="contained" 
-                          color="primary"
-                          onClick={() => navigate(`/take-exam/${exam._id}`)}
-                        >
-                          Take Exam
-                        </Button>
-                      </CardActions>
-                    </Card>
-                  </Grid>
-                ))}
-                {exams.length === 0 && (
-                  <Grid item xs={12}>
+                      </Box>
+                      <Divider sx={{ my: 2 }} />
+                      <Typography variant="subtitle2" color="primary" gutterBottom>
+                        Starts: {format(new Date(exam.startTime), 'PPp')}
+                      </Typography>
+                      <Typography variant="subtitle2" color="error">
+                        Ends: {format(new Date(exam.endTime), 'PPp')}
+                      </Typography>
+                    </CardContent>
+                    <CardActions sx={{ p: 2, pt: 0 }}>
+                      <Button 
+                        fullWidth
+                        variant="contained" 
+                        color="primary"
+                        onClick={() => navigate(`/take-exam/${exam._id}`)}
+                        sx={{ 
+                          borderRadius: 2,
+                          textTransform: 'none',
+                          fontWeight: 600
+                        }}
+                      >
+                        Take Exam
+                      </Button>
+                    </CardActions>
+                  </Card>
+                </Grid>
+              ))}
+              {exams.length === 0 && (
+                <Grid item xs={12}>
+                  <Paper 
+                    sx={{ 
+                      p: 4, 
+                      textAlign: 'center',
+                      backgroundColor: alpha(theme.palette.primary.main, 0.05)
+                    }}
+                  >
+                    <AssignmentIcon sx={{ fontSize: 48, color: theme.palette.text.secondary, mb: 2 }} />
                     <Typography color="text.secondary">
                       No exams available at the moment. Check back later.
                     </Typography>
-                  </Grid>
-                )}
-              </Grid>
-            </Box>
+                  </Paper>
+                </Grid>
+              )}
+            </>
           ) : (
-            // Teacher view
-            <Box sx={{ mt: 4 }}>
-              <Box sx={{ mb: 3, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                <Typography variant="h5" gutterBottom>
-                  Manage Exams
-                </Typography>
-                <Button
-                  variant="contained"
-                  color="primary"
-                  onClick={handleCreateExam}
-                >
-                  Create New Exam
-                </Button>
-              </Box>
-              <Grid container spacing={3}>
-                {exams.map((exam) => (
-                  <Grid item xs={12} sm={6} md={4} key={exam._id}>
-                    <Card>
-                      <CardContent>
-                        <Typography variant="h6" gutterBottom>
-                          {exam.title}
-                        </Typography>
-                        <Typography variant="body2" color="text.secondary" gutterBottom>
-                          Subject: {exam.subject}
-                        </Typography>
+            // Teacher Dashboard
+            <>
+              <Grid item xs={12}>
+                <Box sx={{ 
+                  display: 'flex', 
+                  justifyContent: 'space-between', 
+                  alignItems: 'center',
+                  mb: 3
+                }}>
+                  <Typography variant="h4" sx={{ fontWeight: 600, color: theme.palette.text.primary }}>
+                    Manage Exams
+                  </Typography>
+                  <Button
+                    variant="contained"
+                    color="primary"
+                    onClick={handleCreateExam}
+                    sx={{ 
+                      borderRadius: 2,
+                      textTransform: 'none',
+                      fontWeight: 600,
+                      px: 3
+                    }}
+                  >
+                    Create New Exam
+                  </Button>
+                </Box>
+              </Grid>
+              {exams.map((exam) => (
+                <Grid item xs={12} sm={6} md={4} key={exam._id}>
+                  <Card 
+                    elevation={2}
+                    sx={{ 
+                      height: '100%',
+                      display: 'flex',
+                      flexDirection: 'column',
+                      transition: 'transform 0.2s, box-shadow 0.2s',
+                      '&:hover': {
+                        transform: 'translateY(-4px)',
+                        boxShadow: theme.shadows[4]
+                      }
+                    }}
+                  >
+                    <CardContent sx={{ flexGrow: 1 }}>
+                      <Typography variant="h6" gutterBottom sx={{ fontWeight: 600, color: theme.palette.primary.main }}>
+                        {exam.title}
+                      </Typography>
+                      <Box sx={{ display: 'flex', mb: 2, gap: 1 }}>
+                        <Chip
+                          size="small"
+                          label={exam.subject}
+                          sx={{ backgroundColor: alpha(theme.palette.primary.main, 0.1) }}
+                        />
+                        <Chip
+                          size="small"
+                          label={exam.status}
+                          sx={{ 
+                            backgroundColor: exam.status === 'PUBLISHED' 
+                              ? alpha(theme.palette.success.main, 0.1)
+                              : exam.status === 'SUBMITTED'
+                                ? alpha(theme.palette.info.main, 0.1)
+                                : exam.status === 'COMPLETED'
+                                  ? alpha(theme.palette.grey[500], 0.1)
+                                  : alpha(theme.palette.warning.main, 0.1),
+                            color: exam.status === 'PUBLISHED'
+                              ? theme.palette.success.main
+                              : exam.status === 'SUBMITTED'
+                                ? theme.palette.info.main
+                                : exam.status === 'COMPLETED'
+                                  ? theme.palette.grey[700]
+                                  : theme.palette.warning.main
+                          }}
+                        />
+                      </Box>
+                      <Box sx={{ display: 'flex', alignItems: 'center', mb: 1, gap: 1 }}>
+                        <AccessTimeIcon fontSize="small" color="action" />
                         <Typography variant="body2" color="text.secondary">
-                          Status: {exam.status}
-                        </Typography>
-                        <Typography variant="body2">
                           Duration: {exam.duration} minutes
                         </Typography>
-                        <Typography variant="body2">
+                      </Box>
+                      <Box sx={{ display: 'flex', alignItems: 'center', mb: 1, gap: 1 }}>
+                        <GradeIcon fontSize="small" color="action" />
+                        <Typography variant="body2" color="text.secondary">
                           Total Marks: {exam.totalMarks}
                         </Typography>
-                      </CardContent>
-                      <CardActions>
-                        <IconButton size="small" onClick={() => handleViewExam(exam)}>
+                      </Box>
+                    </CardContent>
+                    <CardActions sx={{ p: 2, pt: 0, display: 'flex', justifyContent: 'space-between' }}>
+                      <Box>
+                        <IconButton 
+                          size="small" 
+                          onClick={() => handleViewExam(exam)}
+                          sx={{ mr: 1 }}
+                        >
                           <VisibilityIcon />
                         </IconButton>
-                        <IconButton size="small" onClick={() => handleEditExam(exam._id!)}>
+                        <IconButton 
+                          size="small" 
+                          onClick={() => handleEditExam(exam._id!)}
+                          sx={{ mr: 1 }}
+                        >
                           <EditIcon />
                         </IconButton>
-                        <IconButton size="small" color="error" onClick={() => handleDeleteExam(exam._id!)}>
+                        <IconButton 
+                          size="small" 
+                          color="error" 
+                          onClick={() => handleDeleteExam(exam._id!)}
+                        >
                           <DeleteIcon />
                         </IconButton>
-                        {exam.status === 'DRAFT' && (
+                      </Box>
+                      <Box>
+                        {exam.status === 'DRAFT' ? (
                           <Button
                             size="small"
                             variant="contained"
                             color="success"
                             onClick={() => handlePublishExam(exam._id!)}
+                            sx={{ 
+                              borderRadius: 2,
+                              textTransform: 'none',
+                              fontWeight: 600
+                            }}
                           >
                             Publish
                           </Button>
+                        ) : (exam.status === 'PUBLISHED' || exam.status === 'SUBMITTED') && (
+                          <Button
+                            size="small"
+                            variant="contained"
+                            color="primary"
+                            startIcon={<PeopleIcon />}
+                            onClick={() => handleViewSubmissions(exam._id!)}
+                            sx={{ 
+                              borderRadius: 2,
+                              textTransform: 'none',
+                              fontWeight: 600
+                            }}
+                          >
+                            View Submissions
+                          </Button>
                         )}
-                      </CardActions>
-                    </Card>
-                  </Grid>
-                ))}
-                {exams.length === 0 && (
-                  <Grid item xs={12}>
+                      </Box>
+                    </CardActions>
+                  </Card>
+                </Grid>
+              ))}
+              {exams.length === 0 && (
+                <Grid item xs={12}>
+                  <Paper 
+                    sx={{ 
+                      p: 4, 
+                      textAlign: 'center',
+                      backgroundColor: alpha(theme.palette.primary.main, 0.05)
+                    }}
+                  >
+                    <AssignmentIcon sx={{ fontSize: 48, color: theme.palette.text.secondary, mb: 2 }} />
                     <Typography color="text.secondary">
                       No exams created yet. Click "Create New Exam" to get started.
                     </Typography>
-                  </Grid>
-                )}
-              </Grid>
-            </Box>
+                  </Paper>
+                </Grid>
+              )}
+            </>
           )}
-        </Paper>
+        </Grid>
       </Container>
 
-      {/* Add View Questions Dialog */}
+      {/* View Questions Dialog with enhanced styling */}
       <Dialog
         open={viewDialogOpen}
         onClose={() => setViewDialogOpen(false)}
         maxWidth="md"
         fullWidth
+        PaperProps={{
+          sx: {
+            borderRadius: 2
+          }
+        }}
       >
-        <DialogTitle>
-          {selectedExam?.title} - Questions
+        <DialogTitle sx={{ 
+          borderBottom: `1px solid ${theme.palette.divider}`,
+          px: 3,
+          py: 2
+        }}>
+          <Typography variant="h6" sx={{ fontWeight: 600 }}>
+            {selectedExam?.title} - Questions
+          </Typography>
         </DialogTitle>
-        <DialogContent>
+        <DialogContent sx={{ px: 3, py: 2 }}>
           {selectedExam?.questions && selectedExam.questions.length > 0 ? (
             <List>
               {selectedExam.questions.map((question: Question, index: number) => (
                 <React.Fragment key={question._id}>
-                  <ListItem>
-                    <ListItemText
-                      primary={
-                        <Typography variant="subtitle1">
-                          Question {index + 1}: {question.questionText}
-                        </Typography>
-                      }
-                      secondary={
-                        <Box sx={{ mt: 1 }}>
-                          <Typography variant="body2" color="text.secondary">
-                            Options:
-                          </Typography>
-                          <List dense>
-                            {question.options?.map((option, optIndex: number) => (
-                              <ListItem key={optIndex}>
-                                <ListItemText
-                                  primary={
-                                    <Typography
-                                      variant="body2"
-                                      color={option.text === question.correctAnswer ? "success.main" : "text.primary"}
-                                    >
-                                      {String.fromCharCode(65 + optIndex)}. {option.text}
-                                      {option.text === question.correctAnswer && " (Correct Answer)"}
-                                    </Typography>
+                  <ListItem sx={{ flexDirection: 'column', alignItems: 'flex-start', py: 2 }}>
+                    <Box sx={{ width: '100%', mb: 2 }}>
+                      <Typography variant="subtitle1" sx={{ fontWeight: 600, color: theme.palette.text.primary }}>
+                        Question {index + 1}: {question.questionText}
+                      </Typography>
+                      <Chip
+                        size="small"
+                        label={`${question.marks} marks`}
+                        sx={{ 
+                          mt: 1,
+                          backgroundColor: alpha(theme.palette.success.main, 0.1),
+                          color: theme.palette.success.main
+                        }}
+                      />
+                    </Box>
+                    <Box sx={{ width: '100%' }}>
+                      <Typography variant="body2" color="text.secondary" gutterBottom>
+                        Options:
+                      </Typography>
+                      <List dense sx={{ pl: 2 }}>
+                        {question.options?.map((option, optIndex: number) => (
+                          <ListItem key={optIndex} sx={{ py: 0.5 }}>
+                            <ListItemText
+                              primary={
+                                <Typography
+                                  variant="body2"
+                                  sx={{
+                                    color: option.isCorrect 
+                                      ? theme.palette.success.main 
+                                      : theme.palette.text.primary,
+                                    fontWeight: option.isCorrect ? 600 : 400
+                                  }}
+                                >
+                                  {String.fromCharCode(65 + optIndex)}. {option.text}
+                                  {option.isCorrect && 
+                                    <Chip 
+                                      size="small" 
+                                      label="Correct Answer"
+                                      sx={{ 
+                                        ml: 1,
+                                        height: 20,
+                                        backgroundColor: alpha(theme.palette.success.main, 0.1),
+                                        color: theme.palette.success.main
+                                      }}
+                                    />
                                   }
-                                />
-                              </ListItem>
-                            ))}
-                          </List>
-                          <Typography variant="body2" color="text.secondary">
-                            Marks: {question.marks}
-                          </Typography>
-                        </Box>
-                      }
-                    />
+                                </Typography>
+                              }
+                            />
+                          </ListItem>
+                        ))}
+                      </List>
+                    </Box>
+                    {/* Show correct answer for non-MCQ questions */}
+                    {(question.questionType === 'TRUE_FALSE' || question.questionType === 'PARAGRAPH') && question.correctAnswer && (
+                      <Box sx={{ width: '100%', mt: 2, p: 2, backgroundColor: alpha(theme.palette.success.light, 0.1), borderRadius: 1 }}>
+                        <Typography variant="body2" color={theme.palette.success.main} fontWeight={600}>
+                          Correct Answer: {question.correctAnswer}
+                        </Typography>
+                      </Box>
+                    )}
                   </ListItem>
-                  {index < (selectedExam.questions?.length || 0) - 1 && <Divider />}
+                  {index < (selectedExam.questions?.length || 0) - 1 && (
+                    <Divider sx={{ my: 1 }} />
+                  )}
                 </React.Fragment>
               ))}
             </List>
           ) : (
-            <Typography color="text.secondary">
-              No questions available for this exam.
-            </Typography>
+            <Box sx={{ textAlign: 'center', py: 4 }}>
+              <AssignmentIcon sx={{ fontSize: 48, color: theme.palette.text.secondary, mb: 2 }} />
+              <Typography color="text.secondary">
+                No questions available for this exam.
+              </Typography>
+            </Box>
           )}
         </DialogContent>
-        <DialogActions>
-          <Button onClick={() => setViewDialogOpen(false)}>Close</Button>
+        <DialogActions sx={{ px: 3, py: 2, borderTop: `1px solid ${theme.palette.divider}` }}>
+          <Button 
+            onClick={() => setViewDialogOpen(false)}
+            sx={{ 
+              textTransform: 'none',
+              fontWeight: 500
+            }}
+          >
+            Close
+          </Button>
           <Button
+            variant="contained"
             color="primary"
             onClick={() => {
               setViewDialogOpen(false);
               handleEditExam(selectedExam?._id!);
+            }}
+            sx={{ 
+              textTransform: 'none',
+              fontWeight: 600,
+              borderRadius: 2
             }}
           >
             Edit Exam

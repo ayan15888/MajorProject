@@ -46,7 +46,7 @@ const ExamSchema = new mongoose.Schema({
   },
   status: {
     type: String,
-    enum: ['DRAFT', 'PUBLISHED', 'COMPLETED'],
+    enum: ['DRAFT', 'PUBLISHED', 'SUBMITTED', 'COMPLETED'],
     default: 'DRAFT'
   }
 }, {
