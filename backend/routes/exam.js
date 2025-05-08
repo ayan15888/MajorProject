@@ -3,7 +3,7 @@ const router = express.Router();
 const { body, validationResult } = require('express-validator');
 const Exam = require('../models/Exam');
 const Question = require('../models/Question');
-const { verifyToken } = require('./auth');
+const { verifyToken, isAdmin } = require('./auth');
 const Result = require('../models/Result');
 
 // Middleware to check if user is a teacher
@@ -84,6 +84,47 @@ router.get('/student', verifyToken, async (req, res) => {
   }
 });
 
+// Get pending approval exams (for admins) - MOVED UP to avoid path conflict
+router.get('/pending-approval', [verifyToken, isAdmin], async (req, res) => {
+  try {
+    console.log('Finding exams with PENDING_APPROVAL status');
+    const pendingExams = await Exam.find({ status: 'PENDING_APPROVAL' })
+      .populate('createdBy', 'name email')
+      .sort({ updatedAt: -1 });
+    
+    console.log(`Found ${pendingExams.length} pending approval exams`);
+    res.json(pendingExams);
+  } catch (error) {
+    console.error('Error fetching pending approval exams:', error);
+    res.status(500).json({ message: error.message });
+  }
+});
+
+// Get all exams with their statuses (admin only)
+router.get('/all-exams', [verifyToken, isAdmin], async (req, res) => {
+  try {
+    const exams = await Exam.find()
+      .populate('createdBy', 'name email')
+      .sort({ startTime: -1 });
+
+    // Get submission counts for all exams
+    const examsWithSubmissions = await Promise.all(
+      exams.map(async (exam) => {
+        const submissionCount = await Result.countDocuments({ examId: exam._id });
+        return {
+          ...exam.toObject(),
+          submissionCount
+        };
+      })
+    );
+    
+    res.json(examsWithSubmissions);
+  } catch (error) {
+    console.error('Error fetching all exams:', error);
+    res.status(500).json({ message: error.message });
+  }
+});
+
 // Get exam by ID with its questions
 router.get('/:examId', verifyToken, async (req, res) => {
   try {
@@ -93,6 +134,18 @@ router.get('/:examId', verifyToken, async (req, res) => {
     
     if (!exam) {
       return res.status(404).json({ message: 'Exam not found' });
+    }
+
+    // If student, check if they've already submitted this exam
+    if (req.user.role === 'student') {
+      const existingSubmission = await Result.findOne({
+        examId: req.params.examId,
+        studentId: req.user._id
+      });
+
+      if (existingSubmission) {
+        return res.status(403).json({ message: 'You have already submitted this exam' });
+      }
     }
 
     const questions = await Question.find({ examId: exam._id }).lean();
@@ -234,6 +287,16 @@ router.post('/:examId/submit', verifyToken, async (req, res) => {
       return res.status(400).json({ message: 'Exam is not available at this time' });
     }
 
+    // Check if student has already submitted this exam
+    const existingSubmission = await Result.findOne({
+      examId: req.params.examId,
+      studentId: req.user._id
+    });
+
+    if (existingSubmission) {
+      return res.status(400).json({ message: 'You have already submitted this exam' });
+    }
+
     const { answers } = req.body;
     let totalMarksObtained = 0;
 
@@ -299,6 +362,96 @@ router.get('/:examId/submission-status', [verifyToken, isTeacher], async (req, r
   } catch (error) {
     console.error('Error fetching exam submission status:', error);
     res.status(500).json({ message: error.message });
+  }
+});
+
+// Teacher requests admin to publish results
+router.put('/:examId/request-publish', [verifyToken, isTeacher], async (req, res) => {
+  try {
+    const { reviewNotes } = req.body;
+    
+    const exam = await Exam.findOneAndUpdate(
+      { _id: req.params.examId, createdBy: req.user._id },
+      { 
+        status: 'PENDING_APPROVAL',
+        reviewNotes: reviewNotes || ''
+      },
+      { new: true }
+    );
+    
+    if (!exam) {
+      return res.status(404).json({ message: 'Exam not found or not authorized' });
+    }
+
+    console.log('Exam marked for admin approval:', {
+      examId: exam._id,
+      status: exam.status,
+      teacher: req.user._id,
+      reviewNotes: exam.reviewNotes
+    });
+    
+    res.json(exam);
+  } catch (error) {
+    console.error('Error requesting result publication:', error);
+    res.status(400).json({ message: error.message });
+  }
+});
+
+// Admin approves and publishes results (accessible only to admins)
+router.put('/:examId/approve-publish', [verifyToken, isAdmin], async (req, res) => {
+  try {
+    const exam = await Exam.findOneAndUpdate(
+      { _id: req.params.examId, status: 'PENDING_APPROVAL' },
+      { status: 'COMPLETED' },
+      { new: true }
+    );
+    
+    if (!exam) {
+      return res.status(404).json({ message: 'Exam not found or not in pending approval status' });
+    }
+
+    console.log('Exam results published by admin:', {
+      examId: exam._id,
+      status: exam.status,
+      admin: req.user._id
+    });
+    
+    res.json(exam);
+  } catch (error) {
+    console.error('Error approving exam results:', error);
+    res.status(400).json({ message: error.message });
+  }
+});
+
+// Admin rejects publication request
+router.put('/:examId/reject-publish', [verifyToken, isAdmin], async (req, res) => {
+  try {
+    const { rejectReason } = req.body;
+    
+    const exam = await Exam.findOneAndUpdate(
+      { _id: req.params.examId, status: 'PENDING_APPROVAL' },
+      { 
+        status: 'SUBMITTED',
+        reviewNotes: rejectReason || 'Rejected by admin. Please review and resubmit.'
+      },
+      { new: true }
+    );
+    
+    if (!exam) {
+      return res.status(404).json({ message: 'Exam not found or not in pending approval status' });
+    }
+
+    console.log('Exam result publication rejected by admin:', {
+      examId: exam._id,
+      status: exam.status,
+      admin: req.user._id,
+      reason: rejectReason
+    });
+    
+    res.json(exam);
+  } catch (error) {
+    console.error('Error rejecting exam results:', error);
+    res.status(400).json({ message: error.message });
   }
 });
 

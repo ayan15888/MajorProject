@@ -173,4 +173,121 @@ router.patch('/review/:resultId', auth, async (req, res) => {
   }
 });
 
+// Check if student has submitted an exam (regardless of status)
+router.get('/check-submission/:examId', auth, async (req, res) => {
+  try {
+    // Find if the student has submitted this exam
+    const submission = await Result.findOne({ 
+      examId: req.params.examId, 
+      studentId: req.user._id 
+    });
+    
+    // Return boolean result
+    res.json({ 
+      hasSubmitted: !!submission,
+      submissionId: submission?._id || null
+    });
+  } catch (error) {
+    console.error('Error checking student submission:', error);
+    res.status(500).json({ message: error.message });
+  }
+});
+
+// Get exam submissions (for admin)
+router.get('/admin/exam/:examId', [auth, async (req, res) => {
+  try {
+    // Check if user is admin
+    if (req.user.role !== 'admin') {
+      return res.status(403).json({ message: 'Access denied. Admin only.' });
+    }
+
+    const exam = await Exam.findById(req.params.examId);
+    if (!exam) {
+      return res.status(404).json({ message: 'Exam not found' });
+    }
+
+    const results = await Result.find({ examId: req.params.examId })
+      .populate('studentId', 'name email')
+      .sort({ submittedAt: -1 });
+    
+    console.log(`Admin fetched ${results.length} submissions for exam ${req.params.examId}`);
+    res.json(results);
+  } catch (error) {
+    console.error('Error fetching exam submissions for admin:', error);
+    res.status(500).json({ message: error.message });
+  }
+}]);
+
+// Cancel exam submission (admin only)
+router.put('/admin/cancel-submission/:resultId', [auth, async (req, res) => {
+  try {
+    // Check if user is admin
+    if (req.user.role !== 'admin') {
+      return res.status(403).json({ message: 'Access denied. Admin only.' });
+    }
+
+    const { reason } = req.body;
+    if (!reason) {
+      return res.status(400).json({ message: 'Cancellation reason is required' });
+    }
+
+    const result = await Result.findById(req.params.resultId);
+    if (!result) {
+      return res.status(404).json({ message: 'Submission not found' });
+    }
+
+    // Update the result status and add cancellation details
+    result.status = 'canceled';
+    result.cancellationReason = reason;
+    result.canceledBy = req.user._id;
+    result.canceledAt = new Date();
+
+    const updatedResult = await result.save();
+    
+    console.log(`Admin canceled submission ${req.params.resultId} due to: ${reason}`);
+    res.json(updatedResult);
+  } catch (error) {
+    console.error('Error canceling submission:', error);
+    res.status(500).json({ message: error.message });
+  }
+}]);
+
+// Get exam submissions (for teachers)
+router.get('/teacher/exam/:examId', auth, async (req, res) => {
+  try {
+    // Check if user is a teacher
+    if (req.user.role !== 'teacher') {
+      return res.status(403).json({ message: 'Access denied. Teachers only.' });
+    }
+
+    const exam = await Exam.findById(req.params.examId);
+    if (!exam) {
+      return res.status(404).json({ message: 'Exam not found' });
+    }
+
+    // Check if the teacher created this exam
+    if (exam.createdBy.toString() !== req.user._id.toString()) {
+      return res.status(403).json({ message: 'Access denied. You can only view submissions for your own exams.' });
+    }
+
+    const results = await Result.find({ examId: req.params.examId })
+      .populate('studentId', 'name email')
+      .populate({
+        path: 'examId',
+        select: 'title subject totalMarks questions',
+        populate: {
+          path: 'questions',
+          model: 'Question'
+        }
+      })
+      .sort({ submittedAt: -1 });
+    
+    console.log(`Teacher fetched ${results.length} submissions for exam ${req.params.examId}`);
+    res.json(results);
+  } catch (error) {
+    console.error('Error fetching exam submissions for teacher:', error);
+    res.status(500).json({ message: error.message });
+  }
+});
+
 module.exports = router; 

@@ -9,8 +9,15 @@ export interface Exam {
   startTime: string; // ISO string format
   endTime: string;   // ISO string format
   totalMarks: number;
-  status: 'DRAFT' | 'PUBLISHED' | 'SUBMITTED' | 'COMPLETED';
+  status: 'DRAFT' | 'PUBLISHED' | 'SUBMITTED' | 'PENDING_APPROVAL' | 'COMPLETED';
   questions?: Question[];
+  reviewNotes?: string;
+  submissionCount?: number;
+  createdBy?: {
+    _id: string;
+    name: string;
+    email: string;
+  };
 }
 
 export interface Question {
@@ -256,11 +263,12 @@ export const examService = {
   },
 
   // Submission operations
-  getExamSubmissions: async (examId: string) => {
+  getExamSubmissions: async (examId: string, isAdmin: boolean = false) => {
     try {
       console.log(`Fetching submissions for exam: ${examId}`);
-      const response = await API.get(`/results/exam/${examId}`);
-      console.log(`Received ${response.data.length} submissions`);
+      // Use admin endpoint if isAdmin is true, otherwise use teacher endpoint
+      const endpoint = isAdmin ? `/results/admin/exam/${examId}` : `/results/teacher/exam/${examId}`;
+      const response = await API.get(endpoint);
       return response.data;
     } catch (error) {
       console.error('Error fetching exam submissions:', error);
@@ -319,14 +327,141 @@ export const examService = {
     }
   },
   
-  // Get submission status of an exam (for teachers)
+  // Get exam submission status (teacher only)
   getExamSubmissionStatus: async (examId: string) => {
     try {
-      console.log(`Fetching submission status for exam: ${examId}`);
       const response = await API.get(`/exams/${examId}/submission-status`);
+      return {
+        submissionCount: response.data.submissionCount,
+        reviewedCount: response.data.reviewedCount,
+        pendingReviewCount: response.data.pendingReviewCount
+      };
+    } catch (error) {
+      console.error('Error getting exam submission status:', error);
+      throw error;
+    }
+  },
+
+  // Teacher requests admin to publish results
+  requestPublishResults: async (examId: string, reviewNotes?: string) => {
+    console.log('Requesting admin to publish results for exam:', examId);
+    
+    try {
+      const response = await API.put(`/exams/${examId}/request-publish`, { reviewNotes });
+      console.log('Request publish response:', response.data);
+
+      // Return a properly formatted exam object
+      const pendingExam = {
+        ...response.data,
+        startTime: formatDate(response.data.startTime),
+        endTime: formatDate(response.data.endTime)
+      };
+      
+      console.log('Formatted exam with pending approval:', pendingExam);
+      return pendingExam;
+    } catch (error) {
+      console.error('Error requesting result publication:', error);
+      throw error;
+    }
+  },
+  
+  // Admin approves result publication
+  approvePublishResults: async (examId: string) => {
+    console.log('Admin approving result publication for exam:', examId);
+    
+    try {
+      const response = await API.put(`/exams/${examId}/approve-publish`);
+      console.log('Approve publish response:', response.data);
+
+      // Return a properly formatted exam object
+      const approvedExam = {
+        ...response.data,
+        startTime: formatDate(response.data.startTime),
+        endTime: formatDate(response.data.endTime)
+      };
+      
+      console.log('Formatted exam with approved results:', approvedExam);
+      return approvedExam;
+    } catch (error) {
+      console.error('Error approving result publication:', error);
+      throw error;
+    }
+  },
+  
+  // Admin rejects result publication
+  rejectPublishResults: async (examId: string, rejectReason?: string) => {
+    console.log('Admin rejecting result publication for exam:', examId);
+    
+    try {
+      const response = await API.put(`/exams/${examId}/reject-publish`, { rejectReason });
+      console.log('Reject publish response:', response.data);
+
+      // Return a properly formatted exam object
+      const rejectedExam = {
+        ...response.data,
+        startTime: formatDate(response.data.startTime),
+        endTime: formatDate(response.data.endTime)
+      };
+      
+      console.log('Formatted exam with rejected publication:', rejectedExam);
+      return rejectedExam;
+    } catch (error) {
+      console.error('Error rejecting result publication:', error);
+      throw error;
+    }
+  },
+  
+  // Get pending approval exams (for admin)
+  getPendingApprovalExams: async () => {
+    try {
+      console.log('Fetching pending approval exams');
+      const response = await API.get('/exams/pending-approval');
+      
+      // Format dates for all exams
+      const formattedExams = response.data.map((exam: any) => ({
+        ...exam,
+        startTime: formatDate(exam.startTime),
+        endTime: formatDate(exam.endTime)
+      }));
+      
+      console.log(`Found ${formattedExams.length} pending approval exams`);
+      return formattedExams;
+    } catch (error) {
+      console.error('Error fetching pending approval exams:', error);
+      throw error;
+    }
+  },
+
+  // Cancel exam submission (admin only)
+  cancelSubmission: async (submissionId: string, reason: string) => {
+    try {
+      console.log('Canceling submission:', submissionId);
+      const response = await API.put(`/results/admin/cancel-submission/${submissionId}`, { reason });
+      console.log('Submission canceled:', response.data);
       return response.data;
     } catch (error) {
-      console.error('Error fetching exam submission status:', error);
+      console.error('Error canceling submission:', error);
+      throw error;
+    }
+  },
+
+  // Get all exams (admin only)
+  getAllExams: async () => {
+    try {
+      console.log('Fetching all exams for admin');
+      const response = await API.get('/exams/all-exams');
+      
+      // Format dates for all exams
+      const formattedExams = response.data.map((exam: any) => ({
+        ...exam,
+        startTime: formatDate(exam.startTime),
+        endTime: formatDate(exam.endTime)
+      }));
+      
+      console.log(`Found ${formattedExams.length} exams`);
+      return formattedExams;
+    } catch (error) {
+      console.error('Error fetching all exams:', error);
       throw error;
     }
   }

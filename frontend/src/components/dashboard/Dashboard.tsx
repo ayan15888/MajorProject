@@ -25,7 +25,9 @@ import {
   Avatar,
   useTheme,
   alpha,
-  Tooltip
+  Tooltip,
+  Alert,
+  AlertTitle
 } from '@mui/material';
 import { useNavigate } from 'react-router-dom';
 import { authService } from '../../api/services/auth.service';
@@ -39,18 +41,25 @@ import {
   Assignment as AssignmentIcon,
   Grade as GradeIcon,
   People as PeopleIcon,
-  CheckCircle as CheckCircleIcon
+  CheckCircle as CheckCircleIcon,
+  HourglassEmpty as HourglassEmptyIcon,
+  Warning as WarningIcon
 } from '@mui/icons-material';
 import { format, formatDistanceToNow } from 'date-fns';
 
 interface User {
   name: string;
   email: string;
-  role: 'student' | 'teacher';
+  role: 'student' | 'teacher' | 'admin';
 }
 
 interface ExamWithSubmissions extends Exam {
   submissionCount?: number;
+  hasSubmitted?: boolean;
+  submissionStatus?: string;
+  cancellationReason?: string;
+  reviewedCount?: number;
+  pendingReviewCount?: number;
 }
 
 const Dashboard = () => {
@@ -71,6 +80,43 @@ const Dashboard = () => {
     } catch (error) {
       console.error('Error fetching submission status:', error);
       return 0;
+    }
+  };
+
+  const checkExamSubmission = async (examId: string): Promise<{ hasSubmitted: boolean; status?: string; reason?: string }> => {
+    try {
+      const result = await examService.getStudentExamResult(examId);
+      return { 
+        hasSubmitted: true, 
+        status: result.status,
+        reason: result.status === 'canceled' ? result.cancellationReason : undefined
+      };
+    } catch (error: any) {
+      // Handle 404 (no result found) and 403 (results not published)
+      if (error.response?.status === 404 || error.response?.status === 403) {
+        // Also check if there's a submission in the backend but results not published yet
+        try {
+          const response = await fetch(`/api/results/check-submission/${examId}`, {
+            method: 'GET',
+            headers: {
+              'Authorization': `Bearer ${localStorage.getItem('token')}`,
+              'Content-Type': 'application/json'
+            }
+          });
+          
+          const data = await response.json();
+          return { 
+            hasSubmitted: data.hasSubmitted || false,
+            status: data.status,
+            reason: data.status === 'canceled' ? data.cancellationReason : undefined
+          };
+        } catch (checkError) {
+          console.error('Error checking submission directly:', checkError);
+          return { hasSubmitted: false };
+        }
+      }
+      console.error('Error checking exam submission:', error);
+      return { hasSubmitted: false };
     }
   };
 
@@ -100,7 +146,24 @@ const Dashboard = () => {
           console.log('Fetching student exams...');
           const studentExams = await examService.getStudentExams();
           console.log('Student exams:', studentExams);
-          setExams(studentExams);
+          
+          // Check submission status for each exam
+          const examsWithSubmissionStatus = await Promise.all(
+            studentExams.map(async (exam: Exam) => {
+              if (exam.status === 'PUBLISHED') {
+                const submissionStatus = await checkExamSubmission(exam._id!);
+                return { 
+                  ...exam, 
+                  hasSubmitted: submissionStatus.hasSubmitted,
+                  submissionStatus: submissionStatus.status,
+                  cancellationReason: submissionStatus.reason
+                };
+              }
+              return exam;
+            })
+          );
+          
+          setExams(examsWithSubmissionStatus);
         }
       } catch (error) {
         console.error('Failed to fetch user data or exams:', error);
@@ -194,36 +257,56 @@ const Dashboard = () => {
     navigate(`/exam-results/${examId}`);
   };
 
-  const handlePublishResults = async (examId: string) => {
-    if (window.confirm('IMPORTANT: Have you reviewed all student submissions first?\n\nIt is recommended to click "Review" first to check student answers before publishing results.\n\nAre you sure you want to publish the results now? Students will be able to see their marks.')) {
-      try {
-        console.log('Publishing results for exam:', examId);
-        const updatedExam = await examService.publishResults(examId);
-        console.log('Results published successfully:', updatedExam);
-        
-        if (!updatedExam || updatedExam.status !== 'COMPLETED') {
-          throw new Error('Failed to publish results - status not updated correctly');
-        }
-
-        // Update the exam in the current state immediately
-        setExams(prevExams => 
-          prevExams.map(exam => 
-            exam._id === examId ? { ...exam, ...updatedExam } : exam
-          )
-        );
-        
-        // Refresh the exam list to get the latest data
-        if (user?.role === 'teacher') {
-          const teacherExams = await examService.getTeacherExams();
-          console.log('Refreshed teacher exams:', teacherExams);
-          setExams(teacherExams);
-        }
-        
-        alert('Results published successfully! Students can now view their results.');
-      } catch (error) {
-        console.error('Failed to publish results:', error);
-        alert('Failed to publish results. Please try again.');
+  const handleRequestPublishResults = async (examId: string) => {
+    // First check if all submissions are reviewed
+    try {
+      const submissionStatus = await examService.getExamSubmissionStatus(examId);
+      if (submissionStatus.pendingReviewCount > 0) {
+        alert('Please review all submissions before requesting publication. Some submissions are still pending review.');
+        return;
       }
+      
+      if (window.confirm('Are you sure you want to request admin approval to publish these results? Students will be able to view their marks after admin approval.')) {
+        try {
+          console.log('Requesting publication for exam:', examId);
+          const updatedExam = await examService.requestPublishResults(examId);
+          console.log('Exam marked for admin approval:', updatedExam);
+          
+          if (!updatedExam || updatedExam.status !== 'PENDING_APPROVAL') {
+            throw new Error('Failed to request publication - status not updated correctly');
+          }
+
+          // Update the exam in the current state immediately
+          setExams(prevExams => 
+            prevExams.map(exam => 
+              exam._id === examId ? { ...exam, ...updatedExam } : exam
+            )
+          );
+          
+          // Refresh the exam list to get the latest data
+          if (user?.role === 'teacher') {
+            const teacherExams = await examService.getTeacherExams();
+            console.log('Refreshed teacher exams:', teacherExams);
+            setExams(teacherExams);
+          }
+          
+          alert('Publication request submitted successfully! Results will be visible to students after admin approval.');
+        } catch (error) {
+          console.error('Failed to request publication:', error);
+          alert('Failed to request publication. Please try again.');
+        }
+      }
+    } catch (error) {
+      console.error('Error checking submission status:', error);
+      alert('Failed to check submission status. Please try again.');
+    }
+  };
+
+  const showRejectionNotes = (exam: any) => {
+    if (exam.reviewNotes) {
+      alert(`Admin feedback: ${exam.reviewNotes}`);
+    } else {
+      alert('The publication request was rejected by admin. Please review your exam submissions and try again.');
     }
   };
 
@@ -250,6 +333,22 @@ const Dashboard = () => {
             Online Examination System
           </Typography>
           <Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
+            {user?.role === 'admin' && (
+              <Button
+                color="inherit"
+                variant="outlined"
+                onClick={() => navigate('/admin')}
+                sx={{
+                  borderColor: alpha(theme.palette.common.white, 0.5),
+                  '&:hover': {
+                    borderColor: theme.palette.common.white,
+                    backgroundColor: alpha(theme.palette.common.white, 0.1)
+                  }
+                }}
+              >
+                Admin Panel
+              </Button>
+            )}
             <Chip
               avatar={<Avatar>{user?.name[0]}</Avatar>}
               label={user?.name}
@@ -309,6 +408,17 @@ const Dashboard = () => {
                     }}
                   >
                     <CardContent sx={{ flexGrow: 1 }}>
+                      {exam.hasSubmitted && exam.submissionStatus === 'canceled' && (
+                        <Alert severity="error" sx={{ mb: 2 }}>
+                          <AlertTitle>Submission Canceled</AlertTitle>
+                          Your submission for this exam has been canceled due to unfair practices.
+                          {exam.cancellationReason && (
+                            <Typography variant="body2" sx={{ mt: 1 }}>
+                              Reason: {exam.cancellationReason}
+                            </Typography>
+                          )}
+                        </Alert>
+                      )}
                       <Typography variant="h6" gutterBottom sx={{ fontWeight: 600, color: theme.palette.primary.main }}>
                         {exam.title}
                       </Typography>
@@ -358,6 +468,25 @@ const Dashboard = () => {
                     </CardContent>
                     <CardActions sx={{ p: 2, pt: 0 }}>
                       {exam.status === 'PUBLISHED' ? (
+                        exam.hasSubmitted ? (
+                          <Button 
+                            fullWidth
+                            variant="contained" 
+                            disabled
+                            sx={{ 
+                              borderRadius: 2,
+                              textTransform: 'none',
+                              fontWeight: 600,
+                              backgroundColor: theme.palette.grey[300],
+                              color: theme.palette.text.secondary,
+                              '&:hover': {
+                                backgroundColor: theme.palette.grey[300]
+                              }
+                            }}
+                          >
+                            Already Appeared
+                          </Button>
+                        ) : (
                         <Button 
                           fullWidth
                           variant="contained" 
@@ -371,6 +500,7 @@ const Dashboard = () => {
                         >
                           Take Exam
                         </Button>
+                        )
                       ) : exam.status === 'COMPLETED' ? (
                         <Button 
                           fullWidth
@@ -465,6 +595,17 @@ const Dashboard = () => {
                     }}
                   >
                     <CardContent sx={{ flexGrow: 1 }}>
+                      {exam.hasSubmitted && exam.submissionStatus === 'canceled' && (
+                        <Alert severity="error" sx={{ mb: 2 }}>
+                          <AlertTitle>Submission Canceled</AlertTitle>
+                          Your submission for this exam has been canceled due to unfair practices.
+                          {exam.cancellationReason && (
+                            <Typography variant="body2" sx={{ mt: 1 }}>
+                              Reason: {exam.cancellationReason}
+                            </Typography>
+                          )}
+                        </Alert>
+                      )}
                       <Typography variant="h6" gutterBottom sx={{ fontWeight: 600, color: theme.palette.primary.main }}>
                         {exam.title}
                       </Typography>
@@ -484,14 +625,18 @@ const Dashboard = () => {
                                 ? alpha(theme.palette.info.main, 0.1)
                                 : exam.status === 'COMPLETED'
                                   ? alpha(theme.palette.grey[500], 0.1)
-                                  : alpha(theme.palette.warning.main, 0.1),
+                                  : exam.status === 'PENDING_APPROVAL'
+                                    ? alpha(theme.palette.warning.main, 0.1)
+                                    : alpha(theme.palette.warning.main, 0.1),
                             color: exam.status === 'PUBLISHED'
                               ? theme.palette.success.main
                               : exam.status === 'SUBMITTED'
                                 ? theme.palette.info.main
                                 : exam.status === 'COMPLETED'
                                   ? theme.palette.grey[700]
-                                  : theme.palette.warning.main
+                                  : exam.status === 'PENDING_APPROVAL'
+                                    ? theme.palette.warning.main
+                                    : theme.palette.warning.main
                           }}
                         />
                         {exam.status === 'PUBLISHED' && exam.submissionCount !== undefined && exam.submissionCount > 0 && (
@@ -559,7 +704,7 @@ const Dashboard = () => {
                           </Button>
                         ) : exam.status === 'PUBLISHED' && exam.submissionCount && exam.submissionCount > 0 ? (
                           <Box sx={{ display: 'flex', gap: 1, flexWrap: 'wrap', justifyContent: 'center' }}>
-                            <Tooltip title="Review student submissions before publishing results">
+                            <Tooltip title="Review student submissions before requesting publication">
                               <Button
                                 size="small"
                                 variant="outlined"
@@ -573,26 +718,76 @@ const Dashboard = () => {
                                   fontSize: '0.75rem'
                                 }}
                               >
-                                Review
+                                {exam.pendingReviewCount ? `Review (${exam.pendingReviewCount} pending)` : 'Review'}
                               </Button>
                             </Tooltip>
-                            <Tooltip title="Publish results to students">
-                              <Button
-                                size="small"
-                                variant="contained"
-                                color="success"
-                                startIcon={<GradeIcon />}
-                                onClick={() => handlePublishResults(exam._id!)}
-                                sx={{ 
-                                  borderRadius: 2,
-                                  textTransform: 'none',
-                                  fontWeight: 600,
-                                  fontSize: '0.75rem'
-                                }}
-                              >
-                                Publish
-                              </Button>
+                            <Tooltip title={exam.pendingReviewCount ? "Review all submissions before requesting publication" : "Request publication to students"}>
+                              <span>
+                                <Button
+                                  size="small"
+                                  variant="contained"
+                                  color="primary"
+                                  startIcon={<GradeIcon />}
+                                  onClick={() => handleRequestPublishResults(exam._id!)}
+                                  disabled={exam.pendingReviewCount ? true : false}
+                                  sx={{ 
+                                    borderRadius: 2,
+                                    textTransform: 'none',
+                                    fontWeight: 600,
+                                    fontSize: '0.75rem'
+                                  }}
+                                >
+                                  {exam.pendingReviewCount ? 'Review All First' : 'Request Publication'}
+                                </Button>
+                              </span>
                             </Tooltip>
+                          </Box>
+                        ) : exam.status === 'PENDING_APPROVAL' ? (
+                          <Button
+                            size="small"
+                            variant="outlined"
+                            color="warning"
+                            startIcon={<HourglassEmptyIcon />}
+                            disabled
+                            sx={{ 
+                              borderRadius: 2,
+                              textTransform: 'none',
+                              fontWeight: 600
+                            }}
+                          >
+                            Pending Admin Approval
+                          </Button>
+                        ) : exam.status === 'SUBMITTED' && exam.reviewNotes ? (
+                          <Box sx={{ display: 'flex', gap: 1, flexWrap: 'wrap', justifyContent: 'center' }}>
+                            <Button
+                              size="small"
+                              variant="outlined"
+                              color="error"
+                              startIcon={<WarningIcon />}
+                              onClick={() => showRejectionNotes(exam)}
+                              sx={{ 
+                                borderRadius: 2,
+                                textTransform: 'none',
+                                fontWeight: 600
+                              }}
+                            >
+                              Publication Rejected
+                            </Button>
+                            <Button
+                              size="small"
+                              variant="contained"
+                              color="primary"
+                              startIcon={<GradeIcon />}
+                              onClick={() => handleRequestPublishResults(exam._id!)}
+                              sx={{ 
+                                borderRadius: 2,
+                                textTransform: 'none',
+                                fontWeight: 600,
+                                fontSize: '0.75rem'
+                              }}
+                            >
+                              Request Again
+                            </Button>
                           </Box>
                         ) : exam.status === 'PUBLISHED' ? (
                           <Button

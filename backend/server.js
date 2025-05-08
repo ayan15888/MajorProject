@@ -62,6 +62,7 @@ const { router: authRouter } = require('./routes/auth');
 app.use('/api/auth', authRouter);
 app.use('/api/exams', require('./routes/exam'));
 app.use('/api/results', require('./routes/results'));
+app.use('/api/admin', require('./routes/admin'));
 
 // Basic route
 app.get('/', (req, res) => {

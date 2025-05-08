@@ -31,7 +31,8 @@ import {
   TableHead,
   TableBody,
   TableRow,
-  TableCell
+  TableCell,
+  Tooltip
 } from '@mui/material';
 import {
   ExpandMore as ExpandMoreIcon,
@@ -65,6 +66,7 @@ const SubmissionReview = () => {
   const [success, setSuccess] = useState<string | null>(null);
   const [publishingResults, setPublishingResults] = useState(false);
   const [confirmPublishOpen, setConfirmPublishOpen] = useState(false);
+  const [reviewNotes, setReviewNotes] = useState('');
 
   useEffect(() => {
     const fetchData = async () => {
@@ -166,27 +168,32 @@ const SubmissionReview = () => {
     }
   };
 
-  const handlePublishResults = async () => {
+  const handleRequestPublication = async () => {
     if (!examId) return;
     
     try {
       setPublishingResults(true);
       setError(null);
       
-      // Call the API to publish results
-      const updatedExam = await examService.publishResults(examId);
+      // Call the API to request publication from admin
+      const updatedExam = await examService.requestPublishResults(examId, reviewNotes);
       
       // Update the local exam state
-      setExam(prev => prev ? { ...prev, status: 'COMPLETED' } : null);
+      setExam(prev => prev ? { ...prev, status: 'PENDING_APPROVAL' } : null);
       
-      setSuccess('Results published successfully! Students can now view their marks.');
+      setSuccess('Publication request submitted successfully! Results will be visible to students after admin approval.');
       setConfirmPublishOpen(false);
       
       // Clear success message after 3 seconds
       setTimeout(() => setSuccess(null), 3000);
+      
+      // Navigate back to dashboard
+      setTimeout(() => {
+        navigate('/dashboard');
+      }, 3000);
     } catch (error: any) {
-      console.error('Failed to publish results:', error);
-      const errorMessage = error.response?.data?.message || error.message || 'Failed to publish results. Please try again.';
+      console.error('Failed to request publication:', error);
+      const errorMessage = error.response?.data?.message || error.message || 'Failed to request publication. Please try again.';
       setError(`Error: ${errorMessage}`);
       
       // Clear error message after 3 seconds
@@ -202,6 +209,14 @@ const SubmissionReview = () => {
   
   const hasUnreviewedSubmissions = () => {
     return submissions.some(submission => submission.status === 'pending-review');
+  };
+
+  const canRequestPublication = () => {
+    // Check if all submissions have been reviewed
+    const allReviewed = !hasUnreviewedSubmissions();
+    // Check if there are any submissions to review
+    const hasSubmissions = submissions.length > 0;
+    return allReviewed && hasSubmissions;
   };
 
   const getQuestionById = (questionId: string): Question | undefined => {
@@ -301,7 +316,7 @@ const SubmissionReview = () => {
               variant="contained"
               color="success"
               onClick={openPublishConfirmation}
-              disabled={publishingResults}
+              disabled={publishingResults || !canRequestPublication()}
               startIcon={publishingResults ? <CircularProgress size={20} /> : <CheckCircleIcon />}
               sx={{ 
                 borderRadius: 2,
@@ -309,9 +324,18 @@ const SubmissionReview = () => {
                 fontWeight: 600
               }}
             >
-              Publish Results to Students
+              {!canRequestPublication() ? 'Review All Submissions First' : 'Publish Results to Students'}
             </Button>
           </Box>
+        )}
+
+        {hasUnreviewedSubmissions() && (
+          <Alert severity="warning" sx={{ mt: 2 }}>
+            <AlertTitle>Action Required</AlertTitle>
+            <Typography variant="body2">
+              There are submissions that need to be reviewed. Please review all submissions before requesting publication.
+            </Typography>
+          </Alert>
         )}
       </Paper>
 
@@ -340,98 +364,108 @@ const SubmissionReview = () => {
           Confirm Publish Results
         </DialogTitle>
         <DialogContent sx={{ pt: 3 }}>
-          <Typography variant="h6" gutterBottom>
-            Are you sure you want to publish the results for {exam?.title}?
-          </Typography>
-          <Typography variant="body1" paragraph>
-            Students will be able to see their marks and correct answers once you publish the results.
-          </Typography>
-          
-          <Box sx={{ mb: 3 }}>
-            <Typography variant="subtitle1" gutterBottom sx={{ fontWeight: 500 }}>
-              Submission Summary:
-            </Typography>
-            <Box sx={{ 
-              p: 2, 
-              borderRadius: 1, 
-              backgroundColor: alpha(theme.palette.primary.main, 0.05),
-              display: 'flex',
-              justifyContent: 'space-around'
-            }}>
-              <Box sx={{ textAlign: 'center' }}>
-                <Typography variant="h5" sx={{ color: theme.palette.primary.main }}>
-                  {submissions.length}
-                </Typography>
-                <Typography variant="body2">Total Submissions</Typography>
-              </Box>
-              <Box sx={{ textAlign: 'center' }}>
-                <Typography variant="h5" sx={{ color: theme.palette.success.main }}>
-                  {submissions.filter(s => s.status === 'completed').length}
-                </Typography>
-                <Typography variant="body2">Reviewed</Typography>
-              </Box>
-              <Box sx={{ textAlign: 'center' }}>
-                <Typography variant="h5" sx={{ color: theme.palette.warning.main }}>
-                  {submissions.filter(s => s.status === 'pending-review').length}
-                </Typography>
-                <Typography variant="body2">Pending Review</Typography>
-              </Box>
-            </Box>
-          </Box>
-          
-          {hasUnreviewedSubmissions() && (
-            <Alert severity="warning" sx={{ mb: 3 }}>
-              <AlertTitle>Warning: Unreviewed Submissions</AlertTitle>
+          {!canRequestPublication() ? (
+            <Alert severity="error" sx={{ mb: 3 }}>
+              <AlertTitle>Cannot Request Publication</AlertTitle>
               <Typography variant="body2">
-                Some submissions have not been reviewed yet. It's recommended to review all submissions
-                before publishing results.
+                Please review all submissions before requesting publication. This ensures fair grading for all students.
               </Typography>
             </Alert>
+          ) : (
+            <>
+              <Typography variant="h6" gutterBottom>
+                Are you sure you want to publish the results for {exam?.title}?
+              </Typography>
+              <Typography variant="body1" paragraph>
+                Students will be able to see their marks and correct answers once you publish the results.
+              </Typography>
+              
+              <Box sx={{ mb: 3 }}>
+                <Typography variant="subtitle1" gutterBottom sx={{ fontWeight: 500 }}>
+                  Submission Summary:
+                </Typography>
+                <Box sx={{ 
+                  p: 2, 
+                  borderRadius: 1, 
+                  backgroundColor: alpha(theme.palette.primary.main, 0.05),
+                  display: 'flex',
+                  justifyContent: 'space-around'
+                }}>
+                  <Box sx={{ textAlign: 'center' }}>
+                    <Typography variant="h5" sx={{ color: theme.palette.primary.main }}>
+                      {submissions.length}
+                    </Typography>
+                    <Typography variant="body2">Total Submissions</Typography>
+                  </Box>
+                  <Box sx={{ textAlign: 'center' }}>
+                    <Typography variant="h5" sx={{ color: theme.palette.success.main }}>
+                      {submissions.filter(s => s.status === 'completed').length}
+                    </Typography>
+                    <Typography variant="body2">Reviewed</Typography>
+                  </Box>
+                  <Box sx={{ textAlign: 'center' }}>
+                    <Typography variant="h5" sx={{ color: theme.palette.warning.main }}>
+                      {submissions.filter(s => s.status === 'pending-review').length}
+                    </Typography>
+                    <Typography variant="body2">Pending Review</Typography>
+                  </Box>
+                </Box>
+              </Box>
+              
+              <Typography variant="subtitle1" gutterBottom sx={{ fontWeight: 500 }}>
+                Student Results Preview:
+              </Typography>
+              <Box sx={{ maxHeight: '250px', overflowY: 'auto', mb: 2 }}>
+                <Table size="small">
+                  <TableHead>
+                    <TableRow>
+                      <TableCell>Student</TableCell>
+                      <TableCell align="right">Score</TableCell>
+                      <TableCell align="right">Percentage</TableCell>
+                      <TableCell align="center">Status</TableCell>
+                    </TableRow>
+                  </TableHead>
+                  <TableBody>
+                    {submissions.map((submission) => (
+                      <TableRow key={submission._id}>
+                        <TableCell>{submission.studentId.name}</TableCell>
+                        <TableCell align="right">{submission.totalMarksObtained} / {exam?.totalMarks}</TableCell>
+                        <TableCell align="right">
+                          {Math.round((submission.totalMarksObtained / (exam?.totalMarks || 1)) * 100)}%
+                        </TableCell>
+                        <TableCell align="center">
+                          {submission.status === 'completed' ? (
+                            <Chip 
+                              size="small" 
+                              color="success" 
+                              label="Reviewed" 
+                              icon={<CheckCircleIcon />} 
+                            />
+                          ) : submission.status === 'pending-review' ? (
+                            <Chip 
+                              size="small" 
+                              color="warning" 
+                              label="Pending Review" 
+                              icon={<WarningIcon />} 
+                            />
+                          ) : submission.status === 'canceled' ? (
+                            <Tooltip title={`Canceled: ${submission.cancellationReason}`}>
+                              <Chip 
+                                size="small" 
+                                color="error" 
+                                label="Canceled" 
+                                icon={<CancelIcon />} 
+                              />
+                            </Tooltip>
+                          ) : null}
+                        </TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
+              </Box>
+            </>
           )}
-          
-          <Typography variant="subtitle1" gutterBottom sx={{ fontWeight: 500 }}>
-            Student Results Preview:
-          </Typography>
-          <Box sx={{ maxHeight: '250px', overflowY: 'auto', mb: 2 }}>
-            <Table size="small">
-              <TableHead>
-                <TableRow>
-                  <TableCell>Student</TableCell>
-                  <TableCell align="right">Score</TableCell>
-                  <TableCell align="right">Percentage</TableCell>
-                  <TableCell align="center">Status</TableCell>
-                </TableRow>
-              </TableHead>
-              <TableBody>
-                {submissions.map((submission) => (
-                  <TableRow key={submission._id}>
-                    <TableCell>{submission.studentId.name}</TableCell>
-                    <TableCell align="right">{submission.totalMarksObtained} / {exam?.totalMarks}</TableCell>
-                    <TableCell align="right">
-                      {Math.round((submission.totalMarksObtained / (exam?.totalMarks || 1)) * 100)}%
-                    </TableCell>
-                    <TableCell align="center">
-                      {submission.status === 'completed' ? (
-                        <Chip 
-                          size="small" 
-                          color="success" 
-                          label="Reviewed" 
-                          icon={<CheckCircleIcon />} 
-                        />
-                      ) : (
-                        <Chip 
-                          size="small" 
-                          color="warning" 
-                          label="Pending Review" 
-                          icon={<WarningIcon />} 
-                        />
-                      )}
-                    </TableCell>
-                  </TableRow>
-                ))}
-              </TableBody>
-            </Table>
-          </Box>
         </DialogContent>
         <DialogActions sx={{ p: 2, borderTop: `1px solid ${theme.palette.divider}` }}>
           <Button onClick={() => setConfirmPublishOpen(false)} sx={{ textTransform: 'none' }}>
@@ -440,7 +474,7 @@ const SubmissionReview = () => {
           <Button 
             variant="contained"
             color="success"
-            onClick={handlePublishResults}
+            onClick={handleRequestPublication}
             disabled={publishingResults}
             startIcon={publishingResults ? <CircularProgress size={20} /> : null}
             sx={{ textTransform: 'none', fontWeight: 600 }}

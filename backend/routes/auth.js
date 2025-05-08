@@ -22,12 +22,20 @@ const verifyToken = (req, res, next) => {
   }
 };
 
+// Middleware to check if user is an admin
+const isAdmin = (req, res, next) => {
+  if (req.user.role !== 'admin') {
+    return res.status(403).json({ message: 'Access denied. Admin only.' });
+  }
+  next();
+};
+
 // Register User
 router.post('/register', [
   body('name').notEmpty().withMessage('Name is required'),
   body('email').isEmail().withMessage('Please enter a valid email'),
   body('password').isLength({ min: 6 }).withMessage('Password must be at least 6 characters long'),
-  body('role').isIn(['student', 'teacher']).withMessage('Invalid role')
+  body('role').isIn(['student', 'teacher', 'admin']).withMessage('Invalid role')
 ], async (req, res) => {
   try {
     const errors = validationResult(req);
@@ -36,6 +44,25 @@ router.post('/register', [
     }
 
     const { name, email, password, role } = req.body;
+
+    // Check if role is admin, ensure this is only possible with admin token
+    if (role === 'admin') {
+      // Check if request has valid admin token
+      const token = req.header('Authorization')?.replace('Bearer ', '');
+      if (!token) {
+        return res.status(403).json({ message: 'Creating admin accounts requires admin privileges' });
+      }
+
+      try {
+        const verified = jwt.verify(token, process.env.JWT_SECRET || 'your-secret-key');
+        // Only allow existing admins to create new admin accounts
+        if (verified.role !== 'admin') {
+          return res.status(403).json({ message: 'Only admins can create admin accounts' });
+        }
+      } catch (error) {
+        return res.status(403).json({ message: 'Invalid token for admin creation' });
+      }
+    }
 
     // Check if user already exists
     let user = await User.findOne({ email });
@@ -139,4 +166,4 @@ router.get('/me', verifyToken, async (req, res) => {
 });
 
 // Fix exports to ensure router is properly exported
-module.exports = { router, verifyToken }; 
+module.exports = { router, verifyToken, isAdmin }; 

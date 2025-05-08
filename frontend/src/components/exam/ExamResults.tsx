@@ -14,7 +14,9 @@ import {
   IconButton,
   Button,
   useTheme,
-  alpha
+  alpha,
+  Alert,
+  AlertTitle
 } from '@mui/material';
 import {
   ArrowBack as ArrowBackIcon,
@@ -63,6 +65,8 @@ interface ExamResult {
   submittedAt: string;
   status: string;
   questions: ResultQuestion[];
+  cancellationReason?: string;
+  canceledAt?: string;
 }
 
 const ExamResults: React.FC<ExamResultProps> = () => {
@@ -180,6 +184,41 @@ const ExamResults: React.FC<ExamResultProps> = () => {
           >
             Back to Dashboard
           </Button>
+        </Paper>
+      </Container>
+    );
+  }
+
+  // Show cancellation notice if the submission was canceled
+  if (result.status === 'canceled') {
+    return (
+      <Container maxWidth="md" sx={{ my: 4 }}>
+        <Paper sx={{ p: 3 }}>
+          <Box sx={{ textAlign: 'center', mb: 3 }}>
+            <CancelIcon color="error" sx={{ fontSize: 64 }} />
+            <Typography variant="h5" color="error" gutterBottom sx={{ mt: 2 }}>
+              Exam Submission Canceled
+            </Typography>
+            <Typography variant="body1" color="text.secondary" paragraph>
+              Your submission for this exam has been canceled due to unfair practices.
+            </Typography>
+            {result.cancellationReason && (
+              <Alert severity="error" sx={{ mt: 2, textAlign: 'left' }}>
+                <AlertTitle>Reason for Cancellation:</AlertTitle>
+                {result.cancellationReason}
+              </Alert>
+            )}
+            <Typography variant="body2" color="text.secondary" sx={{ mt: 2 }}>
+              Canceled on: {new Date(result.canceledAt).toLocaleString()}
+            </Typography>
+            <Button 
+              variant="contained" 
+              onClick={() => navigate('/dashboard')}
+              sx={{ mt: 3 }}
+            >
+              Back to Dashboard
+            </Button>
+          </Box>
         </Paper>
       </Container>
     );

@@ -8,6 +8,7 @@ import CreateExam from './components/exam/CreateExam';
 import TakeExam from './components/exam/TakeExam';
 import SubmissionReview from './components/exam/SubmissionReview';
 import ExamResults from './components/exam/ExamResults';
+import AdminDashboard from './components/admin/AdminDashboard';
 import CssBaseline from '@mui/material/CssBaseline';
 import { useAuth } from './contexts/AuthContext';
 // Import Google Fonts
@@ -111,6 +112,26 @@ const TeacherRoute = ({ children }: { children: React.ReactNode }) => {
   return <>{children}</>;
 };
 
+const AdminRoute = ({ children }: { children: React.ReactNode }) => {
+  const { isAuthenticated, user } = useAuth();
+  const location = useLocation();
+  
+  console.log('AdminRoute render - isAuthenticated:', isAuthenticated, 'role:', user?.role, 'path:', location.pathname);
+  
+  if (!isAuthenticated) {
+    console.log('Not authenticated, redirecting to login');
+    return <Navigate to="/login" state={{ from: location }} replace />;
+  }
+  
+  if (user?.role !== 'admin') {
+    console.log('Not an admin, redirecting to dashboard');
+    return <Navigate to="/dashboard" replace />;
+  }
+  
+  console.log('Authenticated as admin, rendering children');
+  return <>{children}</>;
+};
+
 const App = () => {
   return (
     <ThemeProvider theme={theme}>
@@ -144,6 +165,14 @@ const AppRoutes = () => {
           <PrivateRoute>
             <Dashboard />
           </PrivateRoute>
+        }
+      />
+      <Route
+        path="/admin"
+        element={
+          <AdminRoute>
+            <AdminDashboard />
+          </AdminRoute>
         }
       />
       <Route

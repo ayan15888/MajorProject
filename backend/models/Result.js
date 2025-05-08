@@ -36,8 +36,24 @@ const resultSchema = new mongoose.Schema({
   },
   status: {
     type: String,
-    enum: ['completed', 'pending-review'],
+    enum: ['completed', 'pending-review', 'canceled'],
     default: 'completed'
+  },
+  cancellationReason: {
+    type: String,
+    required: function() {
+      return this.status === 'canceled';
+    }
+  },
+  canceledBy: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'User',
+    required: function() {
+      return this.status === 'canceled';
+    }
+  },
+  canceledAt: {
+    type: Date
   }
 });
 

@@ -41,8 +41,13 @@ const TakeExam = () => {
     const loadExam = async () => {
       try {
         if (!examId) return;
+        
+        setLoading(true);
+        
+        try {
         const examData = await examService.getExamById(examId);
         console.log('Exam data:', examData);
+          
         setExam(examData);
         
         // Initialize answers array
@@ -107,16 +112,28 @@ const TakeExam = () => {
         setTimeLeft(remainingTime);
         setError(null); // Clear any previous errors
 
-      } catch (error) {
+        } catch (error: any) {
+          // Handle case where student already submitted the exam
+          if (error.response?.status === 403 && error.response?.data?.message === 'You have already submitted this exam') {
+            console.log('Student has already submitted this exam');
+            setError('You have already submitted this exam. You cannot take it again.');
+            
+            // Redirect to dashboard after a delay
+            setTimeout(() => {
+              navigate('/dashboard');
+            }, 3000);
+          } else {
         console.error('Failed to load exam:', error);
         setError('Failed to load exam. Please try again.');
+          }
+        }
       } finally {
         setLoading(false);
       }
     };
 
     loadExam();
-  }, [examId]);
+  }, [examId, navigate]);
 
   useEffect(() => {
     if (timeLeft > 0 && !examSubmitted) {
@@ -157,9 +174,16 @@ const TakeExam = () => {
       setTimeout(() => {
         navigate('/dashboard');
       }, 3000);
-    } catch (error) {
+    } catch (error: any) {
       console.error('Failed to submit exam:', error);
-      setError('Failed to submit exam. Please try again.');
+      const errorMessage = error.response?.data?.message || error.message || 'Failed to submit exam. Please try again.';
+      setError(errorMessage);
+      if (error.response?.data?.message === 'You have already submitted this exam') {
+        // If already submitted, redirect to dashboard after showing error
+        setTimeout(() => {
+          navigate('/dashboard');
+        }, 3000);
+      }
     } finally {
       setLoading(false);
     }
@@ -225,7 +249,6 @@ const TakeExam = () => {
         <Box sx={{ mt: 4 }}>
           {exam?.questions?.map((question: any, index: number) => (
             <Paper key={question._id} sx={{ p: 3, mb: 3 }}>
-              <FormControl component="fieldset">
                 <FormLabel component="legend">
                   <Typography variant="h6">
                     Question {index + 1} ({question.marks} marks)
@@ -279,7 +302,6 @@ const TakeExam = () => {
                     </Box>
                   )}
                 </RadioGroup>
-              </FormControl>
             </Paper>
           ))}
         </Box>

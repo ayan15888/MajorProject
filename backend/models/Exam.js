@@ -46,8 +46,12 @@ const ExamSchema = new mongoose.Schema({
   },
   status: {
     type: String,
-    enum: ['DRAFT', 'PUBLISHED', 'SUBMITTED', 'COMPLETED'],
+    enum: ['DRAFT', 'PUBLISHED', 'SUBMITTED', 'PENDING_APPROVAL', 'COMPLETED'],
     default: 'DRAFT'
+  },
+  reviewNotes: {
+    type: String,
+    default: ''
   }
 }, {
   timestamps: true
