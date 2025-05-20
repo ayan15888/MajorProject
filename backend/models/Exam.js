@@ -31,6 +31,20 @@ const ExamSchema = new mongoose.Schema({
     type: Date,
     required: true
   },
+  secureCode: {
+    type: String,
+    required: true,
+    minlength: 6,
+    maxlength: 6,
+    match: /^\d{6}$/,  // Ensures exactly 6 digits
+    select: false  // This field won't be returned in queries by default
+  },
+  batch: {
+    type: String,
+    required: true,
+    trim: true,
+    set: (value) => value.toUpperCase() // Convert batch to uppercase when saving
+  },
   createdBy: {
     type: mongoose.Schema.Types.ObjectId,
     ref: 'User',

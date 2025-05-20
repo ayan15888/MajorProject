@@ -3,6 +3,7 @@ import { BrowserRouter as Router, Routes, Route, Navigate, useLocation } from 'r
 import { ThemeProvider, createTheme } from '@mui/material';
 import LoginForm from './components/auth/LoginForm';
 import RegisterForm from './components/auth/RegisterForm';
+import LandingPage from './components/auth/LandingPage';
 import Dashboard from './components/dashboard/Dashboard';
 import CreateExam from './components/exam/CreateExam';
 import TakeExam from './components/exam/TakeExam';
@@ -96,19 +97,14 @@ const TeacherRoute = ({ children }: { children: React.ReactNode }) => {
   const { isAuthenticated, user } = useAuth();
   const location = useLocation();
   
-  console.log('TeacherRoute render - isAuthenticated:', isAuthenticated, 'role:', user?.role, 'path:', location.pathname);
-  
   if (!isAuthenticated) {
-    console.log('Not authenticated, redirecting to login');
     return <Navigate to="/login" state={{ from: location }} replace />;
   }
   
-  if (user?.role !== 'teacher') {
-    console.log('Not a teacher, redirecting to dashboard');
+  if (user?.role !== 'teacher' && user?.role !== 'admin') {
     return <Navigate to="/dashboard" replace />;
   }
   
-  console.log('Authenticated as teacher, rendering children');
   return <>{children}</>;
 };
 
@@ -159,6 +155,7 @@ const AppRoutes = () => {
       <Route path="/register" element={
         isAuthenticated ? <Navigate to="/dashboard" replace /> : <RegisterForm />
       } />
+      <Route path="/landing" element={<LandingPage />} />
       <Route
         path="/dashboard"
         element={
@@ -216,7 +213,7 @@ const AppRoutes = () => {
         }
       />
       <Route path="/" element={
-        isAuthenticated ? <Navigate to="/dashboard" replace /> : <Navigate to="/login" replace />
+        isAuthenticated ? <Navigate to="/dashboard" replace /> : <Navigate to="/landing" replace />
       } />
       <Route path="*" element={<Navigate to="/" replace />} />
     </Routes>

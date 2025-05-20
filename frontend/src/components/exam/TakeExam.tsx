@@ -16,7 +16,8 @@ import {
   DialogContent,
   DialogContentText,
   DialogActions,
-  Alert
+  Alert,
+  TextField
 } from '@mui/material';
 import { useParams, useNavigate } from 'react-router-dom';
 import { examService } from '../../api/services/exam.service';
@@ -36,6 +37,10 @@ const TakeExam = () => {
   const [confirmSubmit, setConfirmSubmit] = useState(false);
   const [examSubmitted, setExamSubmitted] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [currentQuestionIndex, setCurrentQuestionIndex] = useState(0);
+  const [examStarted, setExamStarted] = useState(false);
+  const [secureCode, setSecureCode] = useState('');
+  const [secureCodeError, setSecureCodeError] = useState('');
 
   useEffect(() => {
     const loadExam = async () => {
@@ -189,9 +194,34 @@ const TakeExam = () => {
     }
   };
 
+  const verifySecureCode = async () => {
+    try {
+      if (!secureCode.match(/^\d{6}$/)) {
+        setSecureCodeError('Please enter a valid 6-digit code');
+        return;
+      }
+
+      console.log('Attempting to verify secure code for exam:', examId);
+      const response = await examService.verifyExamCode(examId!, secureCode);
+      console.log('Verification response:', response);
+
+      if (response.verified) {
+        console.log('Code verified successfully, starting exam');
+        setExamStarted(true);
+        setSecureCodeError('');
+      } else {
+        console.log('Code verification failed');
+        setSecureCodeError('Invalid secure code. Please try again.');
+      }
+    } catch (error: any) {
+      console.error('Error during code verification:', error);
+      setSecureCodeError(error.message || 'Failed to verify code');
+    }
+  };
+
   if (loading) {
     return (
-      <Box display="flex" justifyContent="center" alignItems="center" minHeight="100vh">
+      <Box display="flex" justifyContent="center" alignItems="center" minHeight="80vh">
         <CircularProgress />
       </Box>
     );
@@ -216,6 +246,46 @@ const TakeExam = () => {
         <Alert severity="success" sx={{ mb: 2 }}>
           Exam submitted successfully! Redirecting to dashboard...
         </Alert>
+      </Container>
+    );
+  }
+
+  if (!examStarted) {
+    return (
+      <Container maxWidth="sm">
+        <Paper elevation={3} sx={{ p: 4, mt: 4 }}>
+          <Typography variant="h5" gutterBottom>
+            {exam?.title}
+          </Typography>
+          <Typography variant="body1" gutterBottom>
+            Please enter the secure code provided by your teacher to start the exam.
+          </Typography>
+          <Box sx={{ mt: 3 }}>
+            <TextField
+              fullWidth
+              label="Secure Code"
+              value={secureCode}
+              onChange={(e) => setSecureCode(e.target.value)}
+              error={!!secureCodeError}
+              helperText={secureCodeError}
+              type="password"
+              inputProps={{
+                maxLength: 6,
+                pattern: "\\d{6}"
+              }}
+              sx={{ mb: 2 }}
+            />
+            <Button
+              fullWidth
+              variant="contained"
+              color="primary"
+              onClick={verifySecureCode}
+              disabled={!secureCode || secureCode.length !== 6}
+            >
+              Start Exam
+            </Button>
+          </Box>
+        </Paper>
       </Container>
     );
   }

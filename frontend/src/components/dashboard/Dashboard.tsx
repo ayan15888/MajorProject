@@ -127,9 +127,9 @@ const Dashboard = () => {
         console.log('User data:', userData);
         setUser(userData);
         
-        if (userData.role === 'teacher') {
+        if (userData.role === 'teacher' || userData.role === 'admin') {
           const teacherExams = await examService.getTeacherExams();
-          console.log('Teacher exams:', teacherExams);
+          console.log('Teacher/Admin exams:', teacherExams);
           
           const examsWithSubmissions = await Promise.all(
             teacherExams.map(async (exam: Exam) => {
@@ -145,7 +145,15 @@ const Dashboard = () => {
         } else if (userData.role === 'student') {
           console.log('Fetching student exams...');
           const studentExams = await examService.getStudentExams();
-          console.log('Student exams:', studentExams);
+          console.log('Student exams received:', studentExams.map((exam: Exam) => ({
+            id: exam._id,
+            title: exam.title,
+            status: exam.status,
+            createdBy: exam.createdBy ? {
+              role: exam.createdBy.role,
+              name: exam.createdBy.name
+            } : 'Unknown'
+          })));
           
           // Check submission status for each exam
           const examsWithSubmissionStatus = await Promise.all(
@@ -308,6 +316,12 @@ const Dashboard = () => {
     } else {
       alert('The publication request was rejected by admin. Please review your exam submissions and try again.');
     }
+  };
+
+  const getExamCreatorLabel = (exam: Exam) => {
+    const creatorRole = exam.createdBy?.role || 'teacher';
+    const creatorName = exam.createdBy?.name || 'Unknown';
+    return `${creatorName} (${creatorRole === 'admin' ? 'Administrator' : 'Teacher'})`;
   };
 
   if (loading) {
@@ -552,7 +566,7 @@ const Dashboard = () => {
               )}
             </>
           ) : (
-            // Teacher Dashboard
+            // Teacher/Admin Dashboard
             <>
               <Grid item xs={12}>
                 <Box sx={{ 
@@ -562,7 +576,7 @@ const Dashboard = () => {
                   mb: 3
                 }}>
                   <Typography variant="h4" sx={{ fontWeight: 600, color: theme.palette.text.primary }}>
-                    Manage Exams
+                    {user?.role === 'admin' ? 'Admin Exam Management' : 'Manage Exams'}
                   </Typography>
                   <Button
                     variant="contained"
@@ -662,6 +676,9 @@ const Dashboard = () => {
                           Total Marks: {exam.totalMarks}
                         </Typography>
                       </Box>
+                      <Typography variant="body2" color="text.secondary">
+                        Created by: {getExamCreatorLabel(exam)}
+                      </Typography>
                     </CardContent>
                     <CardActions sx={{ p: 2, pt: 0, display: 'flex', justifyContent: exam.status === 'SUBMITTED' ? 'flex-end' : 'space-between', flexDirection: exam.status === 'SUBMITTED' ? 'column' : 'row', gap: 1 }}>
                       <Box>

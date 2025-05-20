@@ -30,6 +30,7 @@ import {
   Radio,
   RadioGroup,
   Checkbox,
+  SelectChangeEvent
 } from '@mui/material';
 import { Delete as DeleteIcon, Add as AddIcon, Edit as EditIcon, Visibility as VisibilityIcon } from '@mui/icons-material';
 import { useFormik } from 'formik';
@@ -39,6 +40,52 @@ import { useNavigate, useParams } from 'react-router-dom';
 import { format } from 'date-fns';
 
 const steps = ['Exam Details', 'Add Questions'];
+
+interface ExamFormData extends Omit<Exam, 'startTime' | 'endTime'> {
+  startDate: string;
+  startTime: string;
+  secureCode: string;
+}
+
+interface QuestionError {
+  message: string;
+}
+
+interface QuestionOption {
+  text: string;
+  isCorrect: boolean;
+}
+
+interface ExamQuestion extends Question {
+  _id?: string;
+  examId: string;
+  options?: QuestionOption[];
+}
+
+interface ApiError {
+  message: string;
+  code?: string;
+}
+
+const isApiError = (error: unknown): error is ApiError => {
+  return (
+    typeof error === 'object' &&
+    error !== null &&
+    'message' in error &&
+    typeof (error as ApiError).message === 'string'
+  );
+};
+
+const isQuestionOption = (opt: unknown): opt is QuestionOption => {
+  return (
+    typeof opt === 'object' &&
+    opt !== null &&
+    'text' in opt &&
+    'isCorrect' in opt &&
+    typeof (opt as QuestionOption).text === 'string' &&
+    typeof (opt as QuestionOption).isCorrect === 'boolean'
+  );
+};
 
 const CreateExam = () => {
   const navigate = useNavigate();
@@ -50,7 +97,7 @@ const CreateExam = () => {
   const [isViewMode, setIsViewMode] = useState(false);
   const [isEditMode, setIsEditMode] = useState(false);
 
-  const [examData, setExamData] = useState<Omit<Exam, '_id'>>({
+  const [examData, setExamData] = useState<ExamFormData>({
     title: '',
     description: '',
     subject: '',
@@ -58,7 +105,9 @@ const CreateExam = () => {
     startDate: format(new Date(), 'yyyy-MM-dd'),
     startTime: format(new Date(), 'HH:mm'),
     totalMarks: 0,
-    status: 'DRAFT'
+    status: 'DRAFT',
+    batch: '',
+    secureCode: ''
   });
 
   const [questions, setQuestions] = useState<Question[]>([]);
@@ -80,12 +129,20 @@ const CreateExam = () => {
     }
   }, [examId]);
 
+  const handleQuestionError = (error: unknown): string => {
+    if (error instanceof Error) return error.message;
+    if (isApiError(error)) return error.message;
+    return 'An unexpected error occurred';
+  };
+
   const loadExamData = async () => {
     try {
       setLoading(true);
+      if (!examId) return;
+      
       const exam = await examService.getExamById(examId);
       
-      console.log('Received exam data:', exam); // Debug log
+      console.log('Received exam data:', exam);
 
       // Ensure we have valid data
       if (!exam || typeof exam !== 'object') {
@@ -121,14 +178,14 @@ const CreateExam = () => {
         if (isNaN(startDateTime.getTime())) {
           throw new Error('Invalid date value');
         }
-      } catch (dateError) {
-        console.error('Date parsing error:', dateError);
-        // Fallback to current date if parsing fails
+      } catch (error) {
+        const dateError = error as Error;
+        console.error('Date parsing error:', dateError.message);
         startDateTime = new Date();
       }
 
       // Format the exam data
-      const formattedExamData = {
+      const formattedExamData: ExamFormData = {
         title: exam.title || '',
         description: exam.description || '',
         subject: exam.subject || '',
@@ -136,41 +193,67 @@ const CreateExam = () => {
         startDate: format(startDateTime, 'yyyy-MM-dd'),
         startTime: format(startDateTime, 'HH:mm'),
         totalMarks: Number(exam.totalMarks) || 0,
-        status: exam.status || 'DRAFT'
+        status: exam.status || 'DRAFT',
+        batch: exam.batch || '',
+        secureCode: exam.secureCode || ''
       };
 
-      console.log('Formatted exam data:', formattedExamData); // Debug log
       setExamData(formattedExamData);
 
       // Handle questions
-      let formattedQuestions = [];
       if (exam.questions && Array.isArray(exam.questions)) {
-        formattedQuestions = exam.questions.map(q => ({
-          _id: q._id,
-          examId: q.examId,
-          questionText: q.questionText || '',
-          questionType: q.questionType || 'MCQ',
-          marks: Number(q.marks) || 0,
-          correctAnswer: q.correctAnswer || '',
-          options: Array.isArray(q.options) 
-            ? q.options.map(opt => ({
-                text: opt.text || '',
-                isCorrect: Boolean(opt.isCorrect)
-              }))
-            : [
+        const formattedQuestions = exam.questions.map((question: ExamQuestion) => {
+          try {
+            const defaultOptions: QuestionOption[] = [
+              { text: '', isCorrect: false },
+              { text: '', isCorrect: false },
+              { text: '', isCorrect: false },
+              { text: '', isCorrect: false }
+            ];
+
+            const options: QuestionOption[] = Array.isArray(question.options) 
+              ? question.options.filter(isQuestionOption).map(opt => ({
+                  text: opt.text || '',
+                  isCorrect: Boolean(opt.isCorrect)
+                }))
+              : defaultOptions;
+
+            return {
+              _id: question._id,
+              examId: question.examId,
+              questionText: question.questionText || '',
+              questionType: question.questionType || 'MCQ',
+              marks: Number(question.marks) || 0,
+              correctAnswer: question.correctAnswer || '',
+              options: options.length ? options : defaultOptions
+            };
+          } catch (error) {
+            const errorMessage = handleQuestionError(error);
+            console.error('Error processing question:', errorMessage);
+            
+            // Return a default question if there's an error
+            return {
+              _id: `error_${Date.now()}`,
+              examId: examId,
+              questionText: 'Error loading question',
+              questionType: 'MCQ',
+              marks: 0,
+              options: [
                 { text: '', isCorrect: false },
                 { text: '', isCorrect: false },
                 { text: '', isCorrect: false },
                 { text: '', isCorrect: false }
               ]
-        }));
-      }
+            };
+          }
+        });
 
-      console.log('Formatted questions:', formattedQuestions); // Debug log
-      setQuestions(formattedQuestions);
+        setQuestions(formattedQuestions);
+      }
     } catch (error) {
-      console.error('Failed to load exam:', error);
-      alert('Failed to load exam data. Please try again.');
+      const errorMessage = handleQuestionError(error);
+      console.error('Failed to load exam:', errorMessage);
+      alert(errorMessage);
       navigate('/dashboard');
     } finally {
       setLoading(false);
@@ -198,7 +281,7 @@ const CreateExam = () => {
     }));
   };
 
-  const handleQuestionChange = (e: React.ChangeEvent<HTMLInputElement | { name?: string; value: unknown }>) => {
+  const handleQuestionChange = (e: React.ChangeEvent<HTMLInputElement> | SelectChangeEvent) => {
     const { name, value } = e.target;
     if (name) {
       setCurrentQuestion(prev => ({
@@ -219,8 +302,8 @@ const CreateExam = () => {
 
   const handleNext = () => {
     if (activeStep === 0) {
-      if (!examData.title || !examData.description || !examData.subject) {
-        alert('Please fill in all required fields');
+      if (!examData.title || !examData.description || !examData.subject || !examData.batch) {
+        alert('Please fill in all required fields including batch');
         return;
       }
       setActiveStep(1);
@@ -242,8 +325,13 @@ const CreateExam = () => {
       setLoading(true);
       
       // Validate required fields
-      if (!examData.title || !examData.description || !examData.subject) {
-        throw new Error('Please fill in all required exam details (title, description, and subject)');
+      if (!examData.title || !examData.description || !examData.subject || !examData.batch) {
+        throw new Error('Please fill in all required exam details (title, description, subject, and batch)');
+      }
+
+      // Validate secure code
+      if (!examData.secureCode || !examData.secureCode.match(/^\d{6}$/)) {
+        throw new Error('Please enter a valid 6-digit secure code');
       }
 
       if (questions.length === 0) {
@@ -275,10 +363,15 @@ const CreateExam = () => {
         startTime: startDateTime.toISOString(),
         endTime: endDateTime.toISOString(),
         totalMarks: totalMarks,
-        status: examData.status || 'DRAFT'
+        status: examData.status || 'DRAFT',
+        batch: examData.batch.trim(),
+        secureCode: examData.secureCode.trim()
       };
 
-      console.log('Submitting exam payload:', examPayload);
+      console.log('Creating exam with secure code:', {
+        ...examPayload,
+        secureCode: '******' // Hide actual code in logs
+      });
 
       if (examId) {
         // Update existing exam
@@ -380,62 +473,68 @@ const CreateExam = () => {
   };
 
   const handleAddQuestion = () => {
-    if (!currentQuestion.questionText || !currentQuestion.marks) {
-      alert('Please fill in all required fields');
-      return;
-    }
-
-    // For MCQ, validate options
-    if (currentQuestion.questionType === 'MCQ') {
-      const emptyOptions = currentQuestion.options?.some(opt => !opt.text.trim());
-      if (emptyOptions) {
-        alert('Please fill in all option texts');
+    try {
+      if (!currentQuestion.questionText || !currentQuestion.marks) {
+        alert('Please fill in all required fields');
         return;
       }
-      const hasCorrectOption = currentQuestion.options?.some(opt => opt.isCorrect);
-      if (!hasCorrectOption) {
-        alert('Please mark at least one option as correct');
+
+      // For MCQ, validate options
+      if (currentQuestion.questionType === 'MCQ') {
+        const emptyOptions = currentQuestion.options?.some(opt => !opt.text.trim());
+        if (emptyOptions) {
+          alert('Please fill in all option texts');
+          return;
+        }
+        const hasCorrectOption = currentQuestion.options?.some(opt => opt.isCorrect);
+        if (!hasCorrectOption) {
+          alert('Please mark at least one option as correct');
+          return;
+        }
+      }
+
+      // For TRUE_FALSE, validate that correctAnswer is set
+      if (currentQuestion.questionType === 'TRUE_FALSE' && !currentQuestion.correctAnswer) {
+        alert('Please select the correct answer');
         return;
       }
+
+      // For PARAGRAPH, validate that correctAnswer is set
+      if (currentQuestion.questionType === 'PARAGRAPH' && !currentQuestion.correctAnswer) {
+        alert('Please provide the correct answer');
+        return;
+      }
+
+      const newQuestion: Question = {
+        _id: `temp_${Date.now()}`,
+        examId: examId || '',
+        questionText: currentQuestion.questionText || '',
+        questionType: currentQuestion.questionType || 'MCQ',
+        marks: Number(currentQuestion.marks) || 0,
+        options: currentQuestion.questionType === 'MCQ' ? currentQuestion.options : undefined,
+        correctAnswer: currentQuestion.correctAnswer
+      };
+
+      setQuestions(prev => [...prev, newQuestion]);
+
+      // Reset form
+      setCurrentQuestion({
+        questionText: '',
+        questionType: 'MCQ',
+        options: [
+          { text: '', isCorrect: false },
+          { text: '', isCorrect: false },
+          { text: '', isCorrect: false },
+          { text: '', isCorrect: false }
+        ],
+        marks: 0
+      });
+      setOpenQuestionDialog(false);
+    } catch (error) {
+      const err = error as Error;
+      console.error('Error adding question:', err);
+      alert(err.message || 'Failed to add question');
     }
-
-    // For TRUE_FALSE, validate that correctAnswer is set
-    if (currentQuestion.questionType === 'TRUE_FALSE' && !currentQuestion.correctAnswer) {
-      alert('Please select the correct answer');
-      return;
-    }
-
-    // For PARAGRAPH, validate that correctAnswer is set
-    if (currentQuestion.questionType === 'PARAGRAPH' && !currentQuestion.correctAnswer) {
-      alert('Please provide the correct answer');
-      return;
-    }
-
-    const newQuestion: Question = {
-      _id: `temp_${Date.now()}`,
-      examId: examId || '',
-      questionText: currentQuestion.questionText || '',
-      questionType: currentQuestion.questionType || 'MCQ',
-      marks: Number(currentQuestion.marks) || 0,
-      options: currentQuestion.questionType === 'MCQ' ? currentQuestion.options : undefined,
-      correctAnswer: currentQuestion.correctAnswer
-    };
-
-    setQuestions(prev => [...prev, newQuestion]);
-
-    // Reset form
-    setCurrentQuestion({
-      questionText: '',
-      questionType: 'MCQ',
-      options: [
-        { text: '', isCorrect: false },
-        { text: '', isCorrect: false },
-        { text: '', isCorrect: false },
-        { text: '', isCorrect: false }
-      ],
-      marks: 0
-    });
-    setOpenQuestionDialog(false);
   };
 
   const handleDeleteQuestion = async (questionId: string) => {
@@ -552,6 +651,21 @@ const CreateExam = () => {
     handleCloseDialog();
   };
 
+  const handleQuestionTypeChange = (event: SelectChangeEvent) => {
+    setCurrentQuestion(prev => ({
+      ...prev,
+      questionType: event.target.value as Question['questionType']
+    }));
+  };
+
+  const handleQuestionInputChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
+    const { name, value } = e.target;
+    setCurrentQuestion(prev => ({
+      ...prev,
+      [name]: value
+    }));
+  };
+
   const renderExamDetails = () => (
     <Box component="form" onSubmit={handleExamSubmit} noValidate sx={{ mt: 3 }}>
       <Grid container spacing={3}>
@@ -585,6 +699,34 @@ const CreateExam = () => {
             name="subject"
             value={examData.subject}
             onChange={handleExamChange}
+          />
+        </Grid>
+        <Grid item xs={12}>
+          <TextField
+            required
+            fullWidth
+            label="Secure Code (6 digits)"
+            name="secureCode"
+            value={examData.secureCode}
+            onChange={handleExamChange}
+            type="password"
+            inputProps={{ 
+              pattern: "\\d{6}",
+              maxLength: 6,
+              minLength: 6
+            }}
+            helperText="Enter a 6-digit number that students will need to start the exam"
+          />
+        </Grid>
+        <Grid item xs={12}>
+          <TextField
+            required
+            fullWidth
+            label="Batch"
+            name="batch"
+            value={examData.batch}
+            onChange={handleExamChange}
+            helperText="Enter the batch for which this exam is intended (e.g., '2023-24')"
           />
         </Grid>
         <Grid item xs={12} sm={6}>
@@ -746,25 +888,12 @@ const CreateExam = () => {
         </DialogTitle>
         <DialogContent>
           <Box sx={{ pt: 2 }}>
-            <TextField
-              required
-              fullWidth
-              label="Question Text"
-              name="questionText"
-              value={currentQuestion.questionText}
-              onChange={handleQuestionChange}
-              multiline
-              rows={2}
-              sx={{ mb: 2 }}
-              disabled={isViewMode}
-            />
-
             <FormControl fullWidth sx={{ mb: 2 }}>
               <InputLabel>Question Type</InputLabel>
               <Select
                 name="questionType"
                 value={currentQuestion.questionType}
-                onChange={handleQuestionChange}
+                onChange={handleQuestionTypeChange}
                 label="Question Type"
                 disabled={isViewMode || isEditMode}
               >
@@ -777,11 +906,24 @@ const CreateExam = () => {
             <TextField
               required
               fullWidth
+              label="Question Text"
+              name="questionText"
+              value={currentQuestion.questionText}
+              onChange={handleQuestionInputChange}
+              multiline
+              rows={2}
+              sx={{ mb: 2 }}
+              disabled={isViewMode}
+            />
+
+            <TextField
+              required
+              fullWidth
               label="Marks"
               name="marks"
               type="number"
               value={currentQuestion.marks}
-              onChange={handleQuestionChange}
+              onChange={handleQuestionInputChange}
               sx={{ mb: 2 }}
               InputProps={{ inputProps: { min: 1 } }}
               disabled={isViewMode}
@@ -825,8 +967,7 @@ const CreateExam = () => {
                 <RadioGroup
                   name="correctAnswer"
                   value={currentQuestion.correctAnswer || ''}
-                  onChange={(e) => setCurrentQuestion(prev => ({ ...prev, correctAnswer: e.target.value }))}
-                  disabled={isViewMode}
+                  onChange={handleQuestionInputChange}
                 >
                   <FormControlLabel value="true" control={<Radio />} label="True" />
                   <FormControlLabel value="false" control={<Radio />} label="False" />
@@ -841,7 +982,7 @@ const CreateExam = () => {
                 label="Correct Answer"
                 name="correctAnswer"
                 value={currentQuestion.correctAnswer || ''}
-                onChange={(e) => setCurrentQuestion(prev => ({ ...prev, correctAnswer: e.target.value }))}
+                onChange={handleQuestionInputChange}
                 multiline
                 rows={3}
                 sx={{ mb: 2 }}

@@ -137,6 +137,27 @@ const ExamManagement = () => {
     setSelectedExamId(null);
   };
 
+  const handlePublishExam = async (examId: string) => {
+    if (window.confirm('Are you sure you want to publish this exam? Students will be able to take it once published.')) {
+      try {
+        setLoading(true);
+        const updatedExam = await examService.publishExam(examId);
+        
+        if (!updatedExam || updatedExam.status !== 'PUBLISHED') {
+          throw new Error('Failed to publish exam');
+        }
+
+        // Refresh the exam list
+        await fetchExams();
+        setError('');
+      } catch (error: any) {
+        setError(error.message || 'Failed to publish exam');
+      } finally {
+        setLoading(false);
+      }
+    }
+  };
+
   return (
     <>
       {error && (

@@ -76,14 +76,21 @@ router.post('/users', [verifyToken, isAdmin], async (req, res) => {
 // Update user
 router.put('/users/:id', [verifyToken, isAdmin], async (req, res) => {
   try {
-    const { name, email, role, password } = req.body;
-    const updateData = { name, email, role };
+    const { name, email, role, password, rollNumber, batch } = req.body;
+    const updateData = { name, email, role, rollNumber, batch };
 
     // If password is being updated, hash it
     if (password) {
       const salt = await bcrypt.genSalt(10);
       updateData.password = await bcrypt.hash(password, salt);
     }
+
+    // Remove undefined or null fields
+    Object.keys(updateData).forEach(key => {
+      if (updateData[key] === undefined || updateData[key] === null) {
+        delete updateData[key];
+      }
+    });
 
     const user = await User.findByIdAndUpdate(
       req.params.id,

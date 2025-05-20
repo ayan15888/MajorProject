@@ -33,7 +33,11 @@ import {
   AccordionSummary,
   AccordionDetails,
   Badge,
-  Divider
+  Divider,
+  TablePagination,
+  InputAdornment,
+  Snackbar,
+  Alert
 } from '@mui/material';
 import { useNavigate } from 'react-router-dom';
 import { authService } from '../../api/services/auth.service';
@@ -50,7 +54,11 @@ import {
   CheckCircle as CheckCircleIcon,
   Cancel as CancelIcon,
   Warning as WarningIcon,
-  Visibility as VisibilityIcon
+  Visibility as VisibilityIcon,
+  Email as EmailIcon,
+  Badge as BadgeIcon,
+  Class as ClassIcon,
+  Search as SearchIcon
 } from '@mui/icons-material';
 import { examService, Exam } from '../../api/services/exam.service';
 import ExamManagement from './ExamManagement';
@@ -61,6 +69,8 @@ interface User {
   email: string;
   role: 'student' | 'teacher' | 'admin';
   createdAt: string;
+  rollNumber?: string;
+  batch?: string;
 }
 
 const AdminDashboard = () => {
@@ -81,6 +91,8 @@ const AdminDashboard = () => {
   const [formData, setFormData] = useState({
     name: '',
     email: '',
+    rollNumber: '',
+    batch: '',
     password: '',
     role: 'student'
   });
@@ -91,6 +103,16 @@ const AdminDashboard = () => {
   const [rejectDialogOpen, setRejectDialogOpen] = useState(false);
   const [selectedExam, setSelectedExam] = useState<Exam | null>(null);
   const [rejectReason, setRejectReason] = useState('');
+
+  const [searchTerm, setSearchTerm] = useState('');
+  const [page, setPage] = useState(0);
+  const [rowsPerPage, setRowsPerPage] = useState(10);
+
+  const [snackbar, setSnackbar] = useState({
+    open: false,
+    message: '',
+    severity: 'success' as 'success' | 'error' | 'info' | 'warning'
+  });
 
   useEffect(() => {
     const fetchData = async () => {
@@ -144,15 +166,36 @@ const AdminDashboard = () => {
     navigate('/login');
   };
 
+  const handleSnackbarClose = () => {
+    setSnackbar({ ...snackbar, open: false });
+  };
+
+  const showNotification = (message: string, severity: 'success' | 'error' | 'info' | 'warning' = 'success') => {
+    setSnackbar({
+      open: true,
+      message,
+      severity
+    });
+  };
+
   const handleCreateUser = async () => {
     try {
       setLoading(true);
-      const newUser = await adminService.createUser(formData);
+      const userData = {
+        ...formData,
+        ...(formData.role === 'student' 
+          ? { email: undefined } 
+          : { rollNumber: undefined, batch: undefined })
+      };
+      const newUser = await adminService.createUser(userData);
       setUsers([...users, newUser]);
       setCreateDialogOpen(false);
       resetFormData();
+      showNotification('User created successfully');
     } catch (error: any) {
-      setError(error.response?.data?.message || 'Failed to create user');
+      const errorMsg = error.response?.data?.message || 'Failed to create user';
+      setError(errorMsg);
+      showNotification(errorMsg, 'error');
     } finally {
       setLoading(false);
     }
@@ -163,12 +206,34 @@ const AdminDashboard = () => {
     
     try {
       setLoading(true);
-      const updatedUser = await adminService.updateUser(selectedUser._id, formData);
+      const userData = {
+        ...formData,
+        ...(formData.role === 'student' 
+          ? { email: undefined } 
+          : { rollNumber: undefined, batch: undefined })
+      };
+
+      // Remove undefined fields
+      Object.keys(userData).forEach(key => {
+        if (userData[key] === undefined) {
+          delete userData[key];
+        }
+      });
+
+      // Don't send empty password
+      if (!userData.password) {
+        delete userData.password;
+      }
+
+      const updatedUser = await adminService.updateUser(selectedUser._id, userData);
       setUsers(users.map(user => user._id === updatedUser._id ? updatedUser : user));
       setEditDialogOpen(false);
       resetFormData();
+      showNotification('User updated successfully');
     } catch (error: any) {
-      setError(error.response?.data?.message || 'Failed to update user');
+      const errorMsg = error.response?.data?.message || 'Failed to update user';
+      setError(errorMsg);
+      showNotification(errorMsg, 'error');
     } finally {
       setLoading(false);
     }
@@ -182,8 +247,11 @@ const AdminDashboard = () => {
       await adminService.deleteUser(selectedUser._id);
       setUsers(users.filter(user => user._id !== selectedUser._id));
       setDeleteDialogOpen(false);
+      showNotification('User deleted successfully');
     } catch (error: any) {
-      setError(error.response?.data?.message || 'Failed to delete user');
+      const errorMsg = error.response?.data?.message || 'Failed to delete user';
+      setError(errorMsg);
+      showNotification(errorMsg, 'error');
     } finally {
       setLoading(false);
     }
@@ -193,7 +261,9 @@ const AdminDashboard = () => {
     setSelectedUser(user);
     setFormData({
       name: user.name,
-      email: user.email,
+      email: user.email || '',
+      rollNumber: user.rollNumber || '',
+      batch: user.batch || '',
       password: '',
       role: user.role
     });
@@ -209,6 +279,8 @@ const AdminDashboard = () => {
     setFormData({
       name: '',
       email: '',
+      rollNumber: '',
+      batch: '',
       password: '',
       role: 'student'
     });
@@ -321,6 +393,26 @@ const AdminDashboard = () => {
     }
   };
 
+  const filteredUsers = users.filter(user => {
+    const searchLower = searchTerm.toLowerCase();
+    return (
+      user.name.toLowerCase().includes(searchLower) ||
+      (user.email?.toLowerCase().includes(searchLower) || '') ||
+      (user.rollNumber?.toLowerCase().includes(searchLower) || '') ||
+      (user.batch?.toLowerCase().includes(searchLower) || '') ||
+      user.role.toLowerCase().includes(searchLower)
+    );
+  });
+
+  const handleChangePage = (event: unknown, newPage: number) => {
+    setPage(newPage);
+  };
+
+  const handleChangeRowsPerPage = (event: React.ChangeEvent<HTMLInputElement>) => {
+    setRowsPerPage(parseInt(event.target.value, 10));
+    setPage(0);
+  };
+
   if (loading && users.length === 0) {
     return (
       <Box display="flex" justifyContent="center" alignItems="center" minHeight="100vh">
@@ -356,6 +448,13 @@ const AdminDashboard = () => {
           <Typography variant="h6" component="div" sx={{ flexGrow: 1 }}>
             Admin Dashboard
           </Typography>
+          <Button 
+            color="inherit" 
+            onClick={() => navigate('/create-exam')}
+            sx={{ mr: 2 }}
+          >
+            Create Exam
+          </Button>
           <Button color="inherit" onClick={() => navigate('/dashboard')}>
             Dashboard
           </Button>
@@ -374,9 +473,23 @@ const AdminDashboard = () => {
 
         {/* Exam Management Section */}
         <Box sx={{ mb: 6 }}>
-          <Typography variant="h4" gutterBottom>
-            Exam Management Overview
-          </Typography>
+          <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 3 }}>
+            <Typography variant="h4" gutterBottom>
+              Exam Management Overview
+            </Typography>
+            <Button
+              variant="contained"
+              startIcon={<AddIcon />}
+              onClick={() => navigate('/create-exam')}
+              sx={{
+                borderRadius: 2,
+                textTransform: 'none',
+                fontSize: '1rem'
+              }}
+            >
+              Create Exam
+            </Button>
+          </Box>
           <ExamManagement />
         </Box>
 
@@ -503,68 +616,100 @@ const AdminDashboard = () => {
           </Grid>
 
           <Grid item xs={12}>
+            <Paper sx={{ width: '100%', mb: 2 }}>
+              <Box sx={{ p: 2 }}>
+                <TextField
+                  fullWidth
+                  placeholder="Search users..."
+                  value={searchTerm}
+                  onChange={(e) => setSearchTerm(e.target.value)}
+                  InputProps={{
+                    startAdornment: (
+                      <InputAdornment position="start">
+                        <SearchIcon />
+                      </InputAdornment>
+                    ),
+                  }}
+                />
+              </Box>
+            </Paper>
             <TableContainer component={Paper}>
               <Table sx={{ minWidth: 650 }}>
                 <TableHead>
                   <TableRow sx={{ bgcolor: alpha(theme.palette.primary.main, 0.1) }}>
                     <TableCell>Name</TableCell>
                     <TableCell>Email</TableCell>
+                    <TableCell>Roll Number</TableCell>
+                    <TableCell>Batch</TableCell>
                     <TableCell>Role</TableCell>
                     <TableCell>Created At</TableCell>
                     <TableCell align="right">Actions</TableCell>
                   </TableRow>
                 </TableHead>
                 <TableBody>
-                  {users.map((user) => (
-                    <TableRow key={user._id} hover>
-                      <TableCell component="th" scope="row">
-                        <Box sx={{ display: 'flex', alignItems: 'center' }}>
-                          {getRoleIcon(user.role)}
-                          <Typography sx={{ ml: 1 }}>
-                            {user.name}
-                            {currentUser?._id === user._id && (
-                              <Chip 
-                                label="You" 
-                                size="small" 
-                                sx={{ 
-                                  ml: 1, 
-                                  height: 20, 
-                                  bgcolor: alpha(theme.palette.info.main, 0.1),
-                                  color: theme.palette.info.main
-                                }} 
-                              />
-                            )}
-                          </Typography>
-                        </Box>
-                      </TableCell>
-                      <TableCell>{user.email}</TableCell>
-                      <TableCell>{getRoleBadge(user.role)}</TableCell>
-                      <TableCell>
-                        {new Date(user.createdAt).toLocaleDateString()}
-                      </TableCell>
-                      <TableCell align="right">
-                        <IconButton 
-                          size="small" 
-                          color="primary"
-                          onClick={() => openEditDialog(user)}
-                          disabled={loading}
-                        >
-                          <EditIcon />
-                        </IconButton>
-                        <IconButton 
-                          size="small" 
-                          color="error"
-                          onClick={() => openDeleteDialog(user)}
-                          disabled={loading || user._id === currentUser?._id}
-                        >
-                          <DeleteIcon />
-                        </IconButton>
-                      </TableCell>
-                    </TableRow>
-                  ))}
+                  {filteredUsers
+                    .slice(page * rowsPerPage, page * rowsPerPage + rowsPerPage)
+                    .map((user) => (
+                      <TableRow key={user._id} hover>
+                        <TableCell component="th" scope="row">
+                          <Box sx={{ display: 'flex', alignItems: 'center' }}>
+                            {getRoleIcon(user.role)}
+                            <Typography sx={{ ml: 1 }}>
+                              {user.name}
+                              {currentUser?._id === user._id && (
+                                <Chip 
+                                  label="You" 
+                                  size="small" 
+                                  sx={{ 
+                                    ml: 1, 
+                                    height: 20, 
+                                    bgcolor: alpha(theme.palette.info.main, 0.1),
+                                    color: theme.palette.info.main
+                                  }} 
+                                />
+                              )}
+                            </Typography>
+                          </Box>
+                        </TableCell>
+                        <TableCell>{user.email}</TableCell>
+                        <TableCell>{user.role === 'student' ? user.rollNumber : '-'}</TableCell>
+                        <TableCell>{user.role === 'student' ? user.batch : '-'}</TableCell>
+                        <TableCell>{getRoleBadge(user.role)}</TableCell>
+                        <TableCell>
+                          {new Date(user.createdAt).toLocaleDateString()}
+                        </TableCell>
+                        <TableCell align="right">
+                          <IconButton 
+                            size="small" 
+                            color="primary"
+                            onClick={() => openEditDialog(user)}
+                            disabled={loading}
+                          >
+                            <EditIcon />
+                          </IconButton>
+                          <IconButton 
+                            size="small" 
+                            color="error"
+                            onClick={() => openDeleteDialog(user)}
+                            disabled={loading || user._id === currentUser?._id}
+                          >
+                            <DeleteIcon />
+                          </IconButton>
+                        </TableCell>
+                      </TableRow>
+                    ))}
                 </TableBody>
               </Table>
             </TableContainer>
+            <TablePagination
+              rowsPerPageOptions={[5, 10, 25]}
+              component="div"
+              count={filteredUsers.length}
+              rowsPerPage={rowsPerPage}
+              page={page}
+              onPageChange={handleChangePage}
+              onRowsPerPageChange={handleChangeRowsPerPage}
+            />
           </Grid>
         </Grid>
       </Container>
@@ -595,6 +740,30 @@ const AdminDashboard = () => {
                 required
               />
             </Grid>
+            {formData.role === 'student' && (
+              <>
+                <Grid item xs={12} sm={6}>
+                  <TextField
+                    name="rollNumber"
+                    label="Roll Number"
+                    value={formData.rollNumber}
+                    onChange={handleInputChange}
+                    fullWidth
+                    required
+                  />
+                </Grid>
+                <Grid item xs={12} sm={6}>
+                  <TextField
+                    name="batch"
+                    label="Batch"
+                    value={formData.batch}
+                    onChange={handleInputChange}
+                    fullWidth
+                    required
+                  />
+                </Grid>
+              </>
+            )}
             <Grid item xs={12}>
               <TextField
                 name="password"
@@ -659,6 +828,30 @@ const AdminDashboard = () => {
                 required
               />
             </Grid>
+            {formData.role === 'student' && (
+              <>
+                <Grid item xs={12} sm={6}>
+                  <TextField
+                    name="rollNumber"
+                    label="Roll Number"
+                    value={formData.rollNumber}
+                    onChange={handleInputChange}
+                    fullWidth
+                    required
+                  />
+                </Grid>
+                <Grid item xs={12} sm={6}>
+                  <TextField
+                    name="batch"
+                    label="Batch"
+                    value={formData.batch}
+                    onChange={handleInputChange}
+                    fullWidth
+                    required
+                  />
+                </Grid>
+              </>
+            )}
             <Grid item xs={12}>
               <TextField
                 name="password"
@@ -741,6 +934,22 @@ const AdminDashboard = () => {
           </Button>
         </DialogActions>
       </Dialog>
+
+      <Snackbar
+        open={snackbar.open}
+        autoHideDuration={6000}
+        onClose={handleSnackbarClose}
+        anchorOrigin={{ vertical: 'top', horizontal: 'right' }}
+      >
+        <Alert
+          onClose={handleSnackbarClose}
+          severity={snackbar.severity}
+          variant="filled"
+          sx={{ width: '100%' }}
+        >
+          {snackbar.message}
+        </Alert>
+      </Snackbar>
     </Box>
   );
 };

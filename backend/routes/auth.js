@@ -31,57 +31,62 @@ const isAdmin = (req, res, next) => {
 };
 
 // Register User
-router.post('/register', [
-  body('name').notEmpty().withMessage('Name is required'),
-  body('email').isEmail().withMessage('Please enter a valid email'),
-  body('password').isLength({ min: 6 }).withMessage('Password must be at least 6 characters long'),
-  body('role').isIn(['student', 'teacher', 'admin']).withMessage('Invalid role')
-], async (req, res) => {
+router.post('/register', async (req, res) => {
   try {
-    const errors = validationResult(req);
-    if (!errors.isEmpty()) {
-      return res.status(400).json({ errors: errors.array() });
+    // Validate request
+    const { name, email, password, role, rollNumber, batch } = req.body;
+    
+    if (!name || !password) {
+      return res.status(400).json({ message: 'Name and password are required' });
+    }
+    
+    // Role-specific validation
+    if (role === 'student') {
+      if (!rollNumber || !batch) {
+        return res.status(400).json({ message: 'Roll number and batch are required for student registration' });
+      }
+    } else if (!email) {
+      return res.status(400).json({ message: 'Email is required for non-student registration' });
     }
 
-    const { name, email, password, role } = req.body;
-
-    // Check if role is admin, ensure this is only possible with admin token
-    if (role === 'admin') {
-      // Check if request has valid admin token
-      const token = req.header('Authorization')?.replace('Bearer ', '');
-      if (!token) {
-        return res.status(403).json({ message: 'Creating admin accounts requires admin privileges' });
-      }
-
-      try {
-        const verified = jwt.verify(token, process.env.JWT_SECRET || 'your-secret-key');
-        // Only allow existing admins to create new admin accounts
-        if (verified.role !== 'admin') {
-          return res.status(403).json({ message: 'Only admins can create admin accounts' });
-        }
-      } catch (error) {
-        return res.status(403).json({ message: 'Invalid token for admin creation' });
+    // Check for email uniqueness (only for non-students)
+    if (role !== 'student' && email) {
+      const emailExists = await User.findOne({ email });
+      if (emailExists) {
+        return res.status(400).json({ message: 'Email already exists' });
       }
     }
-
-    // Check if user already exists
-    let user = await User.findOne({ email });
-    if (user) {
-      return res.status(400).json({ message: 'User already exists' });
+    
+    // Check for roll number uniqueness (only for students)
+    if (role === 'student' && rollNumber) {
+      const rollNumberExists = await User.findOne({ rollNumber });
+      if (rollNumberExists) {
+        return res.status(400).json({ message: 'Roll number already exists' });
+      }
     }
 
     // Hash password
     const salt = await bcrypt.genSalt(10);
     const hashedPassword = await bcrypt.hash(password, salt);
 
-    // Create new user
-    user = new User({
+    // Create user object based on role
+    const userData = {
       name,
-      email,
       password: hashedPassword,
       role: role || 'student'
-    });
+    };
+    
+    // Add appropriate fields based on role
+    if (role === 'student') {
+      userData.rollNumber = rollNumber;
+      userData.batch = batch;
+      // For students, don't add email field at all
+    } else {
+      userData.email = email;
+    }
 
+    // Create user
+    const user = new User(userData);
     await user.save();
 
     // Create and assign token
@@ -90,24 +95,32 @@ router.post('/register', [
       process.env.JWT_SECRET || 'your-secret-key'
     );
 
-    res.json({ 
+    // Return user data without sensitive information
+    const userResponse = {
+      _id: user._id,
+      name: user.name,
+      role: user.role
+    };
+    
+    // Only add fields that exist
+    if (user.email) userResponse.email = user.email;
+    if (user.rollNumber) userResponse.rollNumber = user.rollNumber;
+    if (user.batch) userResponse.batch = user.batch;
+
+    res.json({
       token,
-      user: {
-        _id: user._id,
-        name: user.name,
-        email: user.email,
-        role: user.role
-      }
+      user: userResponse
     });
   } catch (error) {
-    console.error(error);
-    res.status(500).json({ message: 'Server error' });
+    console.error('Registration error:', error);
+    res.status(400).json({ message: error.message });
   }
 });
 
 // Login User
 router.post('/login', [
-  body('email').isEmail().withMessage('Please enter a valid email'),
+  body('email').optional().isEmail().withMessage('Please enter a valid email'),
+  body('rollNumber').optional().notEmpty().withMessage('Roll number is required for students'),
   body('password').exists().withMessage('Password is required')
 ], async (req, res) => {
   try {
@@ -116,18 +129,26 @@ router.post('/login', [
       return res.status(400).json({ errors: errors.array() });
     }
 
-    const { email, password } = req.body;
+    const { email, rollNumber, password } = req.body;
 
-    // Check if user exists
-    const user = await User.findOne({ email });
+    // Find user by email or roll number
+    let user;
+    if (email) {
+      user = await User.findOne({ email });
+    } else if (rollNumber) {
+      user = await User.findOne({ rollNumber });
+    } else {
+      return res.status(400).json({ message: 'Please provide either email or roll number' });
+    }
+
     if (!user) {
-      return res.status(400).json({ message: 'Invalid email or password' });
+      return res.status(400).json({ message: 'Invalid credentials' });
     }
 
     // Check password
     const validPassword = await bcrypt.compare(password, user.password);
     if (!validPassword) {
-      return res.status(400).json({ message: 'Invalid email or password' });
+      return res.status(400).json({ message: 'Invalid credentials' });
     }
 
     // Create and assign token
@@ -136,17 +157,19 @@ router.post('/login', [
       process.env.JWT_SECRET || 'your-secret-key'
     );
 
-    res.json({ 
+    res.json({
       token,
       user: {
         _id: user._id,
         name: user.name,
         email: user.email,
+        rollNumber: user.rollNumber,
+        batch: user.batch,
         role: user.role
       }
     });
   } catch (error) {
-    console.error(error);
+    console.error('Login error:', error);
     res.status(500).json({ message: 'Server error' });
   }
 });

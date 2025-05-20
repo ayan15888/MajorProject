@@ -10,6 +10,7 @@ export interface Exam {
   endTime: string;   // ISO string format
   totalMarks: number;
   status: 'DRAFT' | 'PUBLISHED' | 'SUBMITTED' | 'PENDING_APPROVAL' | 'COMPLETED';
+  batch: string;
   questions?: Question[];
   reviewNotes?: string;
   submissionCount?: number;
@@ -17,6 +18,7 @@ export interface Exam {
     _id: string;
     name: string;
     email: string;
+    role: 'student' | 'teacher' | 'admin';
   };
 }
 
@@ -464,5 +466,16 @@ export const examService = {
       console.error('Error fetching all exams:', error);
       throw error;
     }
+  },
+
+  verifyExamCode: async (examId: string, secureCode: string): Promise<{ verified: boolean }> => {
+    try {
+      const response = await API.post(`/exams/${examId}/verify-code`, { secureCode });
+      return response.data;
+    } catch (error: any) {
+      throw new Error(error.response?.data?.message || 'Failed to verify exam code');
+    }
   }
-}; 
+};
+
+export default examService; 

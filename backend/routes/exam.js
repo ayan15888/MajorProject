@@ -5,18 +5,24 @@ const Exam = require('../models/Exam');
 const Question = require('../models/Question');
 const { verifyToken, isAdmin } = require('./auth');
 const Result = require('../models/Result');
+const User = require('../models/User');
 
-// Middleware to check if user is a teacher
-const isTeacher = (req, res, next) => {
-  if (req.user.role !== 'teacher') {
-    return res.status(403).json({ message: 'Access denied. Teachers only.' });
+// Middleware to check if user is a teacher or admin
+const isTeacherOrAdmin = (req, res, next) => {
+  if (req.user.role !== 'teacher' && req.user.role !== 'admin') {
+    return res.status(403).json({ message: 'Access denied. Teachers and admins only.' });
   }
   next();
 };
 
 // Create a new exam
-router.post('/', [verifyToken, isTeacher], async (req, res) => {
+router.post('/', [verifyToken, isTeacherOrAdmin], async (req, res) => {
   try {
+    // Validate batch is provided
+    if (!req.body.batch) {
+      return res.status(400).json({ message: 'Batch is required for creating an exam' });
+    }
+
     const exam = new Exam({
       ...req.body,
       createdBy: req.user._id
@@ -29,7 +35,7 @@ router.post('/', [verifyToken, isTeacher], async (req, res) => {
 });
 
 // Add question to exam
-router.post('/:examId/questions', [verifyToken, isTeacher], async (req, res) => {
+router.post('/:examId/questions', [verifyToken, isTeacherOrAdmin], async (req, res) => {
   try {
     const { examId } = req.params;
     const exam = await Exam.findOne({ _id: examId, createdBy: req.user._id });
@@ -52,12 +58,20 @@ router.post('/:examId/questions', [verifyToken, isTeacher], async (req, res) => 
 });
 
 // Get all exams for a teacher
-router.get('/teacher', [verifyToken, isTeacher], async (req, res) => {
+router.get('/teacher', [verifyToken, isTeacherOrAdmin], async (req, res) => {
   try {
-    const exams = await Exam.find({ createdBy: req.user._id })
-      .sort({ createdAt: -1 });
+    // For admin, get all exams they created
+    // For teacher, get only their exams
+    const query = req.user.role === 'admin' ? {} : { createdBy: req.user._id };
+    
+    const exams = await Exam.find(query)
+      .sort({ createdAt: -1 })
+      .populate('createdBy', 'name email role');
+
+    console.log(`Fetched ${exams.length} exams for ${req.user.role}`);
     res.json(exams);
   } catch (error) {
+    console.error('Error fetching teacher/admin exams:', error);
     res.status(500).json({ message: error.message });
   }
 });
@@ -66,20 +80,43 @@ router.get('/teacher', [verifyToken, isTeacher], async (req, res) => {
 router.get('/student', verifyToken, async (req, res) => {
   try {
     const now = new Date();
+    const student = await User.findById(req.user._id);
+    
+    if (!student || !student.batch) {
+      return res.status(400).json({ message: 'Student batch information not found' });
+    }
+
+    console.log('Fetching exams for student batch:', student.batch);
+
     // Get both: 
-    // 1. Published exams that are currently active or upcoming
-    // 2. Completed exams (with results published)
+    // 1. Published exams that are currently active or upcoming for student's batch
+    // 2. Completed exams (with results published) for student's batch
     const exams = await Exam.find({
+      batch: { $regex: new RegExp(`^${student.batch}$`, 'i') }, // Case-insensitive batch matching
       $or: [
         { status: 'PUBLISHED', endTime: { $gte: now } }, // Active or upcoming exams
         { status: 'COMPLETED' } // Completed exams with results
       ]
     })
-    .populate('createdBy', 'name')
+    .populate('createdBy', 'name email role') // Include role to identify creator type
     .sort({ startTime: 1 });
+
+    console.log('Found exams:', {
+      totalExams: exams.length,
+      examDetails: exams.map(exam => ({
+        id: exam._id,
+        title: exam.title,
+        status: exam.status,
+        createdBy: exam.createdBy ? {
+          role: exam.createdBy.role,
+          name: exam.createdBy.name
+        } : 'Unknown'
+      }))
+    });
     
     res.json(exams);
   } catch (error) {
+    console.error('Error fetching student exams:', error);
     res.status(500).json({ message: error.message });
   }
 });
@@ -175,7 +212,7 @@ router.get('/:examId', verifyToken, async (req, res) => {
 });
 
 // Update exam
-router.put('/:examId', [verifyToken, isTeacher], async (req, res) => {
+router.put('/:examId', [verifyToken, isTeacherOrAdmin], async (req, res) => {
   try {
     const exam = await Exam.findOneAndUpdate(
       { _id: req.params.examId, createdBy: req.user._id },
@@ -194,7 +231,7 @@ router.put('/:examId', [verifyToken, isTeacher], async (req, res) => {
 });
 
 // Delete exam and its questions
-router.delete('/:examId', [verifyToken, isTeacher], async (req, res) => {
+router.delete('/:examId', [verifyToken, isTeacherOrAdmin], async (req, res) => {
   try {
     const exam = await Exam.findOneAndDelete({
       _id: req.params.examId,
@@ -215,7 +252,7 @@ router.delete('/:examId', [verifyToken, isTeacher], async (req, res) => {
 });
 
 // Publish exam
-router.put('/:examId/publish', [verifyToken, isTeacher], async (req, res) => {
+router.put('/:examId/publish', [verifyToken, isTeacherOrAdmin], async (req, res) => {
   try {
     const exam = await Exam.findOneAndUpdate(
       { _id: req.params.examId, createdBy: req.user._id },
@@ -242,7 +279,7 @@ router.put('/:examId/publish', [verifyToken, isTeacher], async (req, res) => {
 });
 
 // Complete exam and publish results
-router.put('/:examId/complete', [verifyToken, isTeacher], async (req, res) => {
+router.put('/:examId/complete', [verifyToken, isTeacherOrAdmin], async (req, res) => {
   try {
     const exam = await Exam.findOneAndUpdate(
       { _id: req.params.examId, createdBy: req.user._id },
@@ -336,7 +373,7 @@ router.post('/:examId/submit', verifyToken, async (req, res) => {
 });
 
 // Get submission status for an exam
-router.get('/:examId/submission-status', [verifyToken, isTeacher], async (req, res) => {
+router.get('/:examId/submission-status', [verifyToken, isTeacherOrAdmin], async (req, res) => {
   try {
     const { examId } = req.params;
     
@@ -366,7 +403,7 @@ router.get('/:examId/submission-status', [verifyToken, isTeacher], async (req, r
 });
 
 // Teacher requests admin to publish results
-router.put('/:examId/request-publish', [verifyToken, isTeacher], async (req, res) => {
+router.put('/:examId/request-publish', [verifyToken, isTeacherOrAdmin], async (req, res) => {
   try {
     const { reviewNotes } = req.body;
     
@@ -452,6 +489,38 @@ router.put('/:examId/reject-publish', [verifyToken, isAdmin], async (req, res) =
   } catch (error) {
     console.error('Error rejecting exam results:', error);
     res.status(400).json({ message: error.message });
+  }
+});
+
+// Verify exam secure code
+router.post('/:examId/verify-code', verifyToken, async (req, res) => {
+  try {
+    const { secureCode } = req.body;
+    
+    if (!secureCode || !secureCode.match(/^\d{6}$/)) {
+      return res.status(400).json({ message: 'Invalid secure code format' });
+    }
+
+    // Find exam with secure code (explicitly select the secureCode field)
+    const exam = await Exam.findById(req.params.examId).select('+secureCode');
+    
+    if (!exam) {
+      return res.status(404).json({ message: 'Exam not found' });
+    }
+
+    // Check if exam is published and within time window
+    const now = new Date();
+    if (exam.status !== 'PUBLISHED' || now < exam.startTime || now > exam.endTime) {
+      return res.status(403).json({ message: 'Exam is not available at this time' });
+    }
+
+    // Verify the secure code
+    const verified = exam.secureCode === secureCode;
+    
+    res.json({ verified });
+  } catch (error) {
+    console.error('Error verifying exam code:', error);
+    res.status(500).json({ message: error.message });
   }
 });
 

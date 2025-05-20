@@ -3,14 +3,18 @@ import API from '../config';
 export interface User {
   _id: string;
   name: string;
-  email: string;
+  email?: string;
+  rollNumber?: string;
+  batch?: string;
   role: 'student' | 'teacher' | 'admin';
   createdAt: string;
 }
 
 export interface CreateUserPayload {
   name: string;
-  email: string;
+  email?: string;
+  rollNumber?: string;
+  batch?: string;
   password: string;
   role: string;
 }
@@ -18,6 +22,8 @@ export interface CreateUserPayload {
 export interface UpdateUserPayload {
   name?: string;
   email?: string;
+  rollNumber?: string;
+  batch?: string;
   password?: string;
   role?: string;
 }
