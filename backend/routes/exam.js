@@ -6,6 +6,7 @@ const Question = require('../models/Question');
 const { verifyToken, isAdmin } = require('./auth');
 const Result = require('../models/Result');
 const User = require('../models/User');
+const CheatReport = require('../models/CheatReport');
 
 // Middleware to check if user is a teacher or admin
 const isTeacherOrAdmin = (req, res, next) => {
@@ -520,6 +521,111 @@ router.post('/:examId/verify-code', verifyToken, async (req, res) => {
     res.json({ verified });
   } catch (error) {
     console.error('Error verifying exam code:', error);
+    res.status(500).json({ message: error.message });
+  }
+});
+
+// Report a cheating attempt
+router.post('/:examId/report-cheating', verifyToken, async (req, res) => {
+  try {
+    const { examId } = req.params;
+    const { type, timestamp, studentName, studentId } = req.body;
+    
+    if (!examId || !type || !timestamp) {
+      return res.status(400).json({ message: 'Missing required fields' });
+    }
+
+    // Create a new cheat report
+    const cheatReport = {
+      examId,
+      studentId: studentId || req.user._id,
+      studentName: studentName || req.user.name,
+      type,
+      timestamp,
+      ipAddress: req.ip,
+      userAgent: req.headers['user-agent']
+    };
+
+    // Store the cheat report in the database
+    // You can create a CheatReport model for this purpose
+    const report = new CheatReport(cheatReport);
+    await report.save();
+
+    console.log(`Cheat attempt recorded: ${type} by ${studentName} (${studentId}) for exam ${examId}`);
+    res.status(201).json({ success: true });
+  } catch (error) {
+    console.error('Error recording cheat attempt:', error);
+    res.status(500).json({ message: error.message });
+  }
+});
+
+// Disqualify a student from an exam
+router.post('/:examId/disqualify', verifyToken, async (req, res) => {
+  try {
+    const { examId } = req.params;
+    const { studentId, studentName, reason } = req.body;
+    
+    if (!examId || !studentId) {
+      return res.status(400).json({ message: 'Missing required fields' });
+    }
+
+    // Check if there's an existing submission
+    const existingSubmission = await Result.findOne({ 
+      examId, 
+      studentId
+    });
+
+    if (existingSubmission) {
+      // Update the existing submission
+      existingSubmission.status = 'canceled';
+      existingSubmission.cancellationReason = reason || 'Multiple violations of exam rules';
+      await existingSubmission.save();
+    } else {
+      // Create a new submission with canceled status
+      const result = new Result({
+        examId,
+        studentId,
+        answers: [],
+        totalMarksObtained: 0,
+        status: 'canceled',
+        cancellationReason: reason || 'Multiple violations of exam rules'
+      });
+      await result.save();
+    }
+
+    console.log(`Student ${studentName} (${studentId}) disqualified from exam ${examId}. Reason: ${reason}`);
+    res.status(200).json({ success: true });
+  } catch (error) {
+    console.error('Error disqualifying student:', error);
+    res.status(500).json({ message: error.message });
+  }
+});
+
+// Get all cheat reports for an exam (admin and teacher only)
+router.get('/:examId/cheat-reports', [verifyToken, isTeacherOrAdmin], async (req, res) => {
+  try {
+    const { examId } = req.params;
+    
+    // Fetch the exam to check ownership
+    const exam = await Exam.findById(examId);
+    
+    if (!exam) {
+      return res.status(404).json({ message: 'Exam not found' });
+    }
+
+    // For teachers, only allow if they created the exam
+    if (req.user.role === 'teacher' && exam.createdBy.toString() !== req.user._id.toString()) {
+      return res.status(403).json({ message: 'Access denied. You can only view reports for your own exams.' });
+    }
+
+    // Fetch all cheat reports for this exam
+    const reports = await CheatReport.find({ examId })
+      .sort({ timestamp: -1 })
+      .limit(100); // Limit to last 100 reports
+
+    res.json(reports);
+  } catch (error) {
+    console.error('Error fetching cheat reports:', error);
     res.status(500).json({ message: error.message });
   }
 });

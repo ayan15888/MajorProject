@@ -475,7 +475,37 @@ export const examService = {
     } catch (error: any) {
       throw new Error(error.response?.data?.message || 'Failed to verify exam code');
     }
-  }
+  },
+
+  reportCheatAttempt: async (examId: string, data: any): Promise<any> => {
+    try {
+      const response = await API.post(`/exams/${examId}/report-cheating`, data);
+      return response.data;
+    } catch (error: any) {
+      console.error('Failed to report cheat attempt:', error);
+      // Don't throw error to prevent exam disruption
+      return { success: false };
+    }
+  },
+
+  disqualifyExam: async (examId: string, data: any): Promise<any> => {
+    try {
+      const response = await API.post(`/exams/${examId}/disqualify`, data);
+      return response.data;
+    } catch (error: any) {
+      console.error('Failed to disqualify exam:', error);
+      throw new Error(error.response?.data?.message || 'Failed to disqualify exam');
+    }
+  },
+
+  getCheatReports: async (examId: string): Promise<any[]> => {
+    try {
+      const response = await API.get(`/exams/${examId}/cheat-reports`);
+      return response.data;
+    } catch (error: any) {
+      throw new Error(error.response?.data?.message || 'Failed to fetch cheat reports');
+    }
+  },
 };
 
 export default examService; 

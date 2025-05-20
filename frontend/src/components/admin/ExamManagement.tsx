@@ -24,11 +24,13 @@ import {
   Schedule as ScheduleIcon,
   PlayArrow as OngoingIcon,
   Done as CompletedIcon,
-  Group as GroupIcon
+  Group as GroupIcon,
+  Warning as WarningIcon
 } from '@mui/icons-material';
 import { examService, Exam } from '../../api/services/exam.service';
 import { useNavigate } from 'react-router-dom';
 import ExamSubmissionsList from './ExamSubmissionsList';
+import CheatReportsList from './CheatReportsList';
 
 const ExamManagement = () => {
   const theme = useTheme();
@@ -40,6 +42,7 @@ const ExamManagement = () => {
   const [rowsPerPage, setRowsPerPage] = useState(10);
   const [selectedExamId, setSelectedExamId] = useState<string | null>(null);
   const [submissionsDialogOpen, setSubmissionsDialogOpen] = useState(false);
+  const [cheatReportsDialogOpen, setCheatReportsDialogOpen] = useState(false);
 
   useEffect(() => {
     fetchExams();
@@ -137,6 +140,16 @@ const ExamManagement = () => {
     setSelectedExamId(null);
   };
 
+  const handleViewCheatReports = (examId: string) => {
+    setSelectedExamId(examId);
+    setCheatReportsDialogOpen(true);
+  };
+
+  const handleCloseCheatReportsDialog = () => {
+    setCheatReportsDialogOpen(false);
+    setSelectedExamId(null);
+  };
+
   const handlePublishExam = async (examId: string) => {
     if (window.confirm('Are you sure you want to publish this exam? Students will be able to take it once published.')) {
       try {
@@ -219,14 +232,25 @@ const ExamManagement = () => {
                         {getSubmissionInfo(exam)}
                       </TableCell>
                       <TableCell align="center">
-                        <Tooltip title="View Submissions">
-                          <IconButton
-                            size="small"
-                            onClick={() => handleViewSubmissions(exam._id!)}
-                          >
-                            <VisibilityIcon />
-                          </IconButton>
-                        </Tooltip>
+                        <Box sx={{ display: 'flex', justifyContent: 'center' }}>
+                          <Tooltip title="View Submissions">
+                            <IconButton
+                              size="small"
+                              onClick={() => handleViewSubmissions(exam._id!)}
+                            >
+                              <VisibilityIcon />
+                            </IconButton>
+                          </Tooltip>
+                          <Tooltip title="View Cheat Reports">
+                            <IconButton
+                              size="small"
+                              onClick={() => handleViewCheatReports(exam._id!)}
+                              color="warning"
+                            >
+                              <WarningIcon />
+                            </IconButton>
+                          </Tooltip>
+                        </Box>
                       </TableCell>
                     </TableRow>
                   ))
@@ -247,11 +271,18 @@ const ExamManagement = () => {
 
       {/* Submissions Dialog */}
       {selectedExamId && (
-        <ExamSubmissionsList
-          examId={selectedExamId}
-          open={submissionsDialogOpen}
-          onClose={handleCloseSubmissionsDialog}
-        />
+        <>
+          <ExamSubmissionsList
+            examId={selectedExamId}
+            open={submissionsDialogOpen}
+            onClose={handleCloseSubmissionsDialog}
+          />
+          <CheatReportsList
+            examId={selectedExamId}
+            open={cheatReportsDialogOpen}
+            onClose={handleCloseCheatReportsDialog}
+          />
+        </>
       )}
     </>
   );
