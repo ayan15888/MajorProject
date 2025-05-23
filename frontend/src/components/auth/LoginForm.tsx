@@ -273,22 +273,22 @@ const LoginForm = () => {
 
           <Box sx={{ mt: 2, textAlign: 'center' }}>
             {selectedRole !== 'admin' && (
-              <Typography variant="body2" color="text.secondary">
-                Don't have an account?{' '}
-                <Button
-                  onClick={() => navigate('/register')}
-                  sx={{
-                    textTransform: 'none',
-                    fontWeight: 500,
-                    '&:hover': {
-                      backgroundColor: 'transparent',
-                      textDecoration: 'underline'
-                    }
-                  }}
-                >
-                  Sign Up
-                </Button>
-              </Typography>
+            <Typography variant="body2" color="text.secondary">
+              Don't have an account?{' '}
+              <Button
+                onClick={() => navigate('/register')}
+                sx={{
+                  textTransform: 'none',
+                  fontWeight: 500,
+                  '&:hover': {
+                    backgroundColor: 'transparent',
+                    textDecoration: 'underline'
+                  }
+                }}
+              >
+                Sign Up
+              </Button>
+            </Typography>
             )}
             <Button
               onClick={() => {

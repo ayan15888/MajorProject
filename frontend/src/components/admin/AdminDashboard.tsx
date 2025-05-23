@@ -474,9 +474,9 @@ const AdminDashboard = () => {
         {/* Exam Management Section */}
         <Box sx={{ mb: 6 }}>
           <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 3 }}>
-            <Typography variant="h4" gutterBottom>
-              Exam Management Overview
-            </Typography>
+          <Typography variant="h4" gutterBottom>
+            Exam Management Overview
+          </Typography>
             <Button
               variant="contained"
               startIcon={<AddIcon />}

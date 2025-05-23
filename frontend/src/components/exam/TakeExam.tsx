@@ -17,13 +17,11 @@ import {
   DialogContentText,
   DialogActions,
   Alert,
-  TextField,
-  Snackbar
+  TextField
 } from '@mui/material';
 import { useParams, useNavigate } from 'react-router-dom';
 import { examService } from '../../api/services/exam.service';
 import { authService } from '../../api/services/auth.service';
-import FullscreenIcon from '@mui/icons-material/Fullscreen';
 
 interface Answer {
   questionId: string;
@@ -54,9 +52,6 @@ const TakeExam = () => {
   const [warningCount, setWarningCount] = useState(0);
   const [showWarning, setShowWarning] = useState(false);
   const [disqualified, setDisqualified] = useState(false);
-  const [isFullscreen, setIsFullscreen] = useState(false);
-  const [showFullscreenWarning, setShowFullscreenWarning] = useState(false);
-  const examContainerRef = useRef<HTMLDivElement>(null);
   
   // Store the initial height of window for devtools detection
   const windowHeight = useRef(window.innerHeight);
@@ -67,12 +62,6 @@ const TakeExam = () => {
   // Constants
   const MAX_WARNINGS = 3; // Maximum number of warnings before disqualification
   const WARN_THRESHOLD = 2; // Number of cheat attempts before showing a warning
-
-  // Add a state variable to track warning visibility
-  const [warningVisible, setWarningVisible] = useState(false);
-  const [warningMessage, setWarningMessage] = useState('');
-  const [warningType, setWarningType] = useState<'info' | 'warning' | 'error'>('warning');
-  const warningTimeoutRef = useRef<any>(null);
 
   useEffect(() => {
     const getCurrentUser = async () => {
@@ -239,122 +228,6 @@ const TakeExam = () => {
     }
   };
 
-  // Fullscreen mode functionality
-  const enterFullscreen = async () => {
-    // Check if browser supports fullscreen
-    if (!document.documentElement.requestFullscreen && 
-        !document.documentElement.webkitRequestFullscreen && 
-        !document.documentElement.mozRequestFullScreen && 
-        !document.documentElement.msRequestFullscreen) {
-      console.warn('Fullscreen API not supported by this browser');
-      // Allow exam to start anyway if fullscreen is not supported
-      setExamStarted(true);
-      return true;
-    }
-
-    try {
-      // If already in fullscreen, don't try to request it again
-      if (document.fullscreenElement || 
-          document.webkitFullscreenElement || 
-          document.mozFullScreenElement || 
-          document.msFullscreenElement) {
-        console.log('Already in fullscreen mode');
-        setIsFullscreen(true);
-        return true;
-      }
-
-      if (examContainerRef.current) {
-        // Try different fullscreen methods based on browser
-        if (examContainerRef.current.requestFullscreen) {
-          await examContainerRef.current.requestFullscreen();
-        } else if (examContainerRef.current.webkitRequestFullscreen) {
-          // @ts-ignore - Safari
-          await examContainerRef.current.webkitRequestFullscreen();
-        } else if (examContainerRef.current.mozRequestFullScreen) {
-          // @ts-ignore - Firefox
-          await examContainerRef.current.mozRequestFullScreen();
-        } else if (examContainerRef.current.msRequestFullscreen) {
-          // @ts-ignore - IE/Edge
-          await examContainerRef.current.msRequestFullscreen();
-        }
-        
-        // Give browser a moment to enter fullscreen
-        await new Promise(resolve => setTimeout(resolve, 500));
-        
-        // Check if we're in fullscreen now
-        const isInFullscreen = !!(document.fullscreenElement || 
-                                document.webkitFullscreenElement || 
-                                document.mozFullScreenElement || 
-                                document.msFullscreenElement);
-        
-        setIsFullscreen(isInFullscreen);
-        return isInFullscreen;
-      }
-      return false;
-    } catch (error) {
-      console.error('Failed to enter fullscreen mode:', error);
-      // Allow exam to proceed anyway after showing an error
-      alert('Fullscreen mode could not be activated. You may continue with the exam, but this will be logged.');
-      return true;
-    }
-  };
-
-  // Handle fullscreen change event
-  useEffect(() => {
-    const isInFullscreen = () => !!(document.fullscreenElement || 
-                                  document.webkitFullscreenElement || 
-                                  document.mozFullScreenElement || 
-                                  document.msFullscreenElement);
-                                  
-    const handleFullscreenChange = () => {
-      const inFullscreen = isInFullscreen();
-      setIsFullscreen(inFullscreen);
-      
-      // If exam has started and user exits fullscreen, show warning
-      if (examStarted && !inFullscreen) {
-        showWarningBanner('Exiting fullscreen mode is not allowed. Please return to fullscreen immediately.', 'error');
-        setShowFullscreenWarning(true);
-        // Log this as a cheating attempt
-        logCheatAttempt('lost_focus');
-      }
-    };
-
-    // Add multiple event listeners for different browsers
-    document.addEventListener('fullscreenchange', handleFullscreenChange);
-    document.addEventListener('webkitfullscreenchange', handleFullscreenChange);
-    document.addEventListener('mozfullscreenchange', handleFullscreenChange);
-    document.addEventListener('MSFullscreenChange', handleFullscreenChange);
-    
-    return () => {
-      // Clean up event listeners
-      document.removeEventListener('fullscreenchange', handleFullscreenChange);
-      document.removeEventListener('webkitfullscreenchange', handleFullscreenChange);
-      document.removeEventListener('mozfullscreenchange', handleFullscreenChange);
-      document.removeEventListener('MSFullscreenChange', handleFullscreenChange);
-      
-      // Exit fullscreen when component unmounts if needed
-      if (isInFullscreen()) {
-        try {
-          if (document.exitFullscreen) {
-            document.exitFullscreen();
-          } else if (document.webkitExitFullscreen) {
-            // @ts-ignore
-            document.webkitExitFullscreen();
-          } else if (document.mozCancelFullScreen) {
-            // @ts-ignore
-            document.mozCancelFullScreen();
-          } else if (document.msExitFullscreen) {
-            // @ts-ignore
-            document.msExitFullscreen();
-          }
-        } catch (err) {
-          console.error('Error exiting fullscreen on unmount:', err);
-        }
-      }
-    };
-  }, [examStarted]);
-
-  // Modified verifySecureCode function to enter fullscreen after verification
   const verifySecureCode = async () => {
     try {
       if (!secureCode.match(/^\d{6}$/)) {
@@ -368,19 +241,8 @@ const TakeExam = () => {
 
       if (response.verified) {
         console.log('Code verified successfully, starting exam');
-        
-        // Try to enter fullscreen mode
-        const fullscreenSuccess = await enterFullscreen();
-        
-        // Always proceed with exam, but log if fullscreen failed
         setExamStarted(true);
         setSecureCodeError('');
-        
-        if (!fullscreenSuccess) {
-          // Log the event but don't block the exam
-          console.warn('Fullscreen failed but allowing exam to proceed');
-          setShowFullscreenWarning(true);
-        }
       } else {
         console.log('Code verification failed');
         setSecureCodeError('Invalid secure code. Please try again.');
@@ -391,43 +253,57 @@ const TakeExam = () => {
     }
   };
 
-  // Create a function to handle fullscreen warning dismissal
-  const handleFullscreenWarningClose = () => {
-    setShowFullscreenWarning(false);
-    
-    // Try to re-enter fullscreen
-    enterFullscreen();
-  };
-
-  // Function to show warnings
-  const showWarningBanner = (message: string, type: 'info' | 'warning' | 'error' = 'warning', duration: number = 8000) => {
-    // Clear any existing timeout
-    if (warningTimeoutRef.current) {
-      clearTimeout(warningTimeoutRef.current);
-    }
-
-    // Update warning content
-    setWarningMessage(message);
-    setWarningType(type);
-    setWarningVisible(true);
-
-    // Auto-hide after duration
-    warningTimeoutRef.current = setTimeout(() => {
-      setWarningVisible(false);
-    }, duration);
-
-    // Log warning
-    console.log(`Warning displayed (${type}):`, message);
-  };
-
-  // Modify the warning display in useEffect for anti-cheat
+  // Anti-cheat system
   useEffect(() => {
     if (!examStarted) return;
+
+    // Function to log cheat attempts
+    const logCheatAttempt = async (type: 'tab_change' | 'lost_focus' | 'dev_tools' | 'copy_paste') => {
+      if (disqualified) return; // Don't log if already disqualified
+      
+      const newAttempt = { type, timestamp: Date.now() };
+      setCheatAttempts(prev => [...prev, newAttempt]);
+
+      try {
+        // Report the attempt to backend
+        await examService.reportCheatAttempt(examId!, {
+          type,
+          timestamp: Date.now(),
+          examId: examId!,
+          studentName: user?.name || 'Unknown',
+          studentId: user?._id || 'Unknown'
+        });
+      } catch (error) {
+        console.error("Failed to report cheat attempt:", error);
+      }
+
+      // Count recent attempts (in the last 5 minutes)
+      const recentAttempts = [...cheatAttempts, newAttempt].filter(
+        attempt => Date.now() - attempt.timestamp < 5 * 60 * 1000
+      );
+
+      // Show warning if exceeded threshold
+      if (recentAttempts.length >= WARN_THRESHOLD) {
+        setShowWarning(true);
+        setWarningCount(prev => {
+          const newCount = prev + 1;
+          if (newCount >= MAX_WARNINGS) {
+            setDisqualified(true);
+            handleDisqualification();
+          }
+          return newCount;
+        });
+        
+        // Clear recent attempts after warning
+        setCheatAttempts(prev => 
+          prev.filter(attempt => Date.now() - attempt.timestamp >= 5 * 60 * 1000)
+        );
+      }
+    };
 
     // Handle tab visibility change (tab switching)
     const handleVisibilityChange = () => {
       if (document.hidden) {
-        showWarningBanner('Attempting to switch tabs is not allowed and has been reported.', 'error');
         logCheatAttempt('tab_change');
       }
     };
@@ -435,7 +311,6 @@ const TakeExam = () => {
     // Handle window blur (clicking outside the browser)
     const handleBlur = () => {
       if (!blurWarningShown.current) {
-        showWarningBanner('Clicking outside the exam window is not allowed and has been reported.', 'error');
         logCheatAttempt('lost_focus');
         blurWarningShown.current = true;
         // Reset after 5 seconds
@@ -451,7 +326,6 @@ const TakeExam = () => {
       const threshold = initialHeight.current * 0.1; // 10% height change threshold
       
       if (heightDifference > threshold && !devToolsWarningShown.current) {
-        showWarningBanner('Suspicious window resize detected. This has been reported.', 'error');
         logCheatAttempt('dev_tools');
         devToolsWarningShown.current = true;
         // Reset after 5 seconds
@@ -464,8 +338,12 @@ const TakeExam = () => {
     // Handle copy/paste attempts
     const handleCopyPaste = (e: ClipboardEvent) => {
       e.preventDefault();
-      showWarningBanner('Copy/paste actions are not allowed and have been reported.', 'error');
       logCheatAttempt('copy_paste');
+    };
+
+    // Right-click prevention
+    const preventRightClick = (e: MouseEvent) => {
+      e.preventDefault();
     };
 
     // Add event listeners
@@ -474,6 +352,7 @@ const TakeExam = () => {
     window.addEventListener('resize', handleResize);
     document.addEventListener('copy', handleCopyPaste);
     document.addEventListener('paste', handleCopyPaste);
+    document.addEventListener('contextmenu', preventRightClick);
 
     // DevTools detection by console clearing
     const clearConsoleInterval = setInterval(() => {
@@ -489,59 +368,10 @@ const TakeExam = () => {
       window.removeEventListener('resize', handleResize);
       document.removeEventListener('copy', handleCopyPaste);
       document.removeEventListener('paste', handleCopyPaste);
+      document.removeEventListener('contextmenu', preventRightClick);
       clearInterval(clearConsoleInterval);
     };
   }, [examStarted, examId, cheatAttempts, disqualified, user]);
-
-  // Modify the logCheatAttempt function to use the enhanced warning system
-  const logCheatAttempt = async (type: 'tab_change' | 'lost_focus' | 'dev_tools' | 'copy_paste') => {
-    if (disqualified) return; // Don't log if already disqualified
-    
-    const newAttempt = { type, timestamp: Date.now() };
-    setCheatAttempts(prev => [...prev, newAttempt]);
-
-    try {
-      // Report the attempt to backend
-      await examService.reportCheatAttempt(examId!, {
-        type,
-        timestamp: Date.now(),
-        examId: examId!,
-        studentName: user?.name || 'Unknown',
-        studentId: user?._id || 'Unknown'
-      });
-    } catch (error) {
-      console.error("Failed to report cheat attempt:", error);
-    }
-
-    // Count recent attempts (in the last 5 minutes)
-    const recentAttempts = [...cheatAttempts, newAttempt].filter(
-      attempt => Date.now() - attempt.timestamp < 5 * 60 * 1000
-    );
-
-    // Show warning if exceeded threshold
-    if (recentAttempts.length >= WARN_THRESHOLD) {
-      openWarningDialog(); // Use the new function
-      setWarningCount(prev => {
-        const newCount = prev + 1;
-        if (newCount >= MAX_WARNINGS) {
-          setDisqualified(true);
-          handleDisqualification();
-        }
-        return newCount;
-      });
-      
-      // Clear recent attempts after warning
-      setCheatAttempts(prev => 
-        prev.filter(attempt => Date.now() - attempt.timestamp >= 5 * 60 * 1000)
-      );
-    }
-  };
-
-  // Add this to modify the function that opens the warning dialog
-  const openWarningDialog = () => {
-    setShowWarning(true);
-    showWarningBanner(`WARNING: This is warning ${warningCount+1} of ${MAX_WARNINGS}. Continued violations will result in disqualification.`, 'error', 10000);
-  };
 
   const handleDisqualification = async () => {
     try {
@@ -626,13 +456,9 @@ const TakeExam = () => {
               color="primary"
               onClick={verifySecureCode}
               disabled={!secureCode || secureCode.length !== 6}
-              startIcon={<FullscreenIcon />}
             >
-              Start Exam in Fullscreen Mode
+              Start Exam
             </Button>
-            <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mt: 2 }}>
-              Note: Entering fullscreen mode is required. Exiting fullscreen during the exam will be logged.
-            </Typography>
           </Box>
         </Paper>
       </Container>
@@ -647,46 +473,8 @@ const TakeExam = () => {
   };
 
   return (
-    <div ref={examContainerRef} style={{ width: '100vw', height: '100vh', overflow: 'auto', backgroundColor: '#f5f5f5', position: 'relative' }}>
-      {/* Warning Banner - always visible on top */}
-      {warningVisible && (
-        <div 
-          style={{
-            position: 'fixed', 
-            top: 0, 
-            left: 0, 
-            width: '100%', 
-            padding: '15px',
-            backgroundColor: warningType === 'error' ? '#f44336' : 
-                            warningType === 'warning' ? '#ff9800' : '#2196f3',
-            color: 'white',
-            fontWeight: 'bold',
-            textAlign: 'center',
-            zIndex: 9999,
-            boxShadow: '0 2px 10px rgba(0,0,0,0.2)'
-          }}
-        >
-          {warningMessage}
-          <button 
-            onClick={() => setWarningVisible(false)}
-            style={{
-              position: 'absolute',
-              right: '10px',
-              top: '50%',
-              transform: 'translateY(-50%)',
-              background: 'none',
-              border: 'none',
-              color: 'white',
-              cursor: 'pointer',
-              fontSize: '20px'
-            }}
-          >
-            ×
-          </button>
-        </div>
-      )}
-
-      <Container maxWidth="md" sx={{ my: 4, pb: 4, pt: warningVisible ? 6 : 3 }}>
+    <>
+      <Container maxWidth="md" sx={{ my: 4 }}>
         <Paper sx={{ p: 3 }}>
           <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 3 }}>
             <Typography variant="h4" gutterBottom>
@@ -795,51 +583,25 @@ const TakeExam = () => {
         </Dialog>
       </Container>
 
-      {/* Fullscreen Warning */}
-      <Snackbar
-        open={showFullscreenWarning}
-        anchorOrigin={{ vertical: 'top', horizontal: 'center' }}
-        onClose={handleFullscreenWarningClose}
-        sx={{ zIndex: 10000 }} // Ensure it's on top of everything
-      >
-        <Alert
-          severity="error"
-          onClose={handleFullscreenWarningClose}
-          sx={{ width: '100%', boxShadow: '0 4px 20px rgba(0,0,0,0.3)' }}
-          action={
-            <Button color="inherit" size="small" onClick={enterFullscreen} variant="outlined" sx={{ fontWeight: 'bold' }}>
-              Return to Fullscreen
-            </Button>
-          }
-        >
-          Exiting fullscreen mode is not allowed and has been reported. Please return to fullscreen.
-        </Alert>
-      </Snackbar>
-
-      {/* Warning Dialog - enhanced with better visibility */}
+      {/* Warning Dialog */}
       <Dialog
         open={showWarning}
         onClose={handleWarningClose}
-        sx={{ zIndex: 10000 }} // Ensure it's visible in fullscreen
       >
-        <DialogTitle sx={{ color: 'error.main', bgcolor: 'error.light', fontWeight: 'bold' }}>⚠️ WARNING</DialogTitle>
+        <DialogTitle sx={{ color: 'error.main' }}>⚠️ Warning</DialogTitle>
         <DialogContent>
-          <DialogContentText sx={{ my: 2 }}>
-            <Typography variant="h6" sx={{ mb: 2, color: 'error.main' }}>
-              Suspicious activity has been detected and reported to the administrator.
-            </Typography>
-            <Typography variant="body1">
-              Please focus on your exam. You have received {warningCount} out of {MAX_WARNINGS} warnings.
-            </Typography>
+          <DialogContentText>
+            Suspicious activity has been detected and reported to the administrator. 
+            Please focus on your exam. You have received {warningCount} out of {MAX_WARNINGS} warnings.
             {warningCount >= MAX_WARNINGS - 1 && (
-              <Typography variant="body1" sx={{ color: 'error.main', mt: 2, fontWeight: 'bold', border: '1px solid red', p: 2, bgcolor: 'error.light' }}>
+              <Typography variant="body1" sx={{ color: 'error.main', mt: 2, fontWeight: 'bold' }}>
                 THIS IS YOUR FINAL WARNING. One more violation will result in disqualification.
               </Typography>
             )}
           </DialogContentText>
         </DialogContent>
-        <DialogActions sx={{ bgcolor: 'grey.100' }}>
-          <Button onClick={handleWarningClose} color="primary" variant="contained">
+        <DialogActions>
+          <Button onClick={handleWarningClose} color="primary">
             I Understand
           </Button>
         </DialogActions>
@@ -864,7 +626,7 @@ const TakeExam = () => {
           </Button>
         </DialogActions>
       </Dialog>
-    </div>
+    </>
   );
 };
 

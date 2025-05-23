@@ -89,22 +89,24 @@ router.get('/student', verifyToken, async (req, res) => {
 
     console.log('Fetching exams for student batch:', student.batch);
 
-    // Get both: 
-    // 1. Published exams that are currently active or upcoming for student's batch
-    // 2. Completed exams (with results published) for student's batch
+    // Get exams for student's batch with proper status filtering
     const exams = await Exam.find({
       batch: { $regex: new RegExp(`^${student.batch}$`, 'i') }, // Case-insensitive batch matching
+      status: { $in: ['PUBLISHED', 'COMPLETED'] }, // Only get published or completed exams
       $or: [
-        { status: 'PUBLISHED', endTime: { $gte: now } }, // Active or upcoming exams
+        { endTime: { $gte: now } }, // Active or upcoming exams
         { status: 'COMPLETED' } // Completed exams with results
       ]
     })
-    .populate('createdBy', 'name email role') // Include role to identify creator type
+    .populate('createdBy', 'name email role')
     .sort({ startTime: 1 });
 
+    // Remove any potential duplicates by using _id as unique identifier
+    const uniqueExams = Array.from(new Map(exams.map(exam => [exam._id.toString(), exam])).values());
+
     console.log('Found exams:', {
-      totalExams: exams.length,
-      examDetails: exams.map(exam => ({
+      totalExams: uniqueExams.length,
+      examDetails: uniqueExams.map(exam => ({
         id: exam._id,
         title: exam.title,
         status: exam.status,
@@ -115,7 +117,7 @@ router.get('/student', verifyToken, async (req, res) => {
       }))
     });
     
-    res.json(exams);
+    res.json(uniqueExams);
   } catch (error) {
     console.error('Error fetching student exams:', error);
     res.status(500).json({ message: error.message });
@@ -542,12 +544,10 @@ router.post('/:examId/report-cheating', verifyToken, async (req, res) => {
       studentName: studentName || req.user.name,
       type,
       timestamp,
-      ipAddress: req.ip,
       userAgent: req.headers['user-agent']
     };
 
     // Store the cheat report in the database
-    // You can create a CheatReport model for this purpose
     const report = new CheatReport(cheatReport);
     await report.save();
 

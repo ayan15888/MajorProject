@@ -30,7 +30,6 @@ interface CheatReport {
   studentName: string;
   type: 'tab_change' | 'lost_focus' | 'dev_tools' | 'copy_paste';
   timestamp: string;
-  ipAddress?: string;
   userAgent?: string;
   createdAt: string;
 }
@@ -189,7 +188,6 @@ const CheatReportsList: React.FC<CheatReportsListProps> = ({ examId, open, onClo
                     <TableCell>Time</TableCell>
                     <TableCell>Student</TableCell>
                     <TableCell>Violation Type</TableCell>
-                    <TableCell>IP Address</TableCell>
                   </TableRow>
                 </TableHead>
                 <TableBody>
@@ -210,7 +208,6 @@ const CheatReportsList: React.FC<CheatReportsListProps> = ({ examId, open, onClo
                               size="small" 
                             />
                           </TableCell>
-                          <TableCell>{report.ipAddress || 'Not available'}</TableCell>
                         </TableRow>
                       );
                     })}
